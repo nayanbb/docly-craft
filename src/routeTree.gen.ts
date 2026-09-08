@@ -10,33 +10,128 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as AiToolsRouteImport } from './routes/ai-tools'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as ImageToolsRouteImport } from './routes/image-tools'
+import { Route as PdfToolsRouteImport } from './routes/pdf-tools'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as ToolsSlugRouteImport } from './routes/tools.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiToolsRoute = AiToolsRouteImport.update({
+  id: '/ai-tools',
+  path: '/ai-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImageToolsRoute = ImageToolsRouteImport.update({
+  id: '/image-tools',
+  path: '/image-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PdfToolsRoute = PdfToolsRouteImport.update({
+  id: '/pdf-tools',
+  path: '/pdf-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsSlugRoute = ToolsSlugRouteImport.update({
+  id: '/tools/$slug',
+  path: '/tools/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/ai-tools': typeof AiToolsRoute
+  '/contact': typeof ContactRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/pricing': typeof PricingRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/ai-tools': typeof AiToolsRoute
+  '/contact': typeof ContactRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/pricing': typeof PricingRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/ai-tools': typeof AiToolsRoute
+  '/contact': typeof ContactRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/pricing': typeof PricingRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/ai-tools'
+    | '/contact'
+    | '/image-tools'
+    | '/pdf-tools'
+    | '/pricing'
+    | '/tools/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/about'
+    | '/ai-tools'
+    | '/contact'
+    | '/image-tools'
+    | '/pdf-tools'
+    | '/pricing'
+    | '/tools/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/ai-tools'
+    | '/contact'
+    | '/image-tools'
+    | '/pdf-tools'
+    | '/pricing'
+    | '/tools/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
+  AiToolsRoute: typeof AiToolsRoute
+  ContactRoute: typeof ContactRoute
+  ImageToolsRoute: typeof ImageToolsRoute
+  PdfToolsRoute: typeof PdfToolsRoute
+  PricingRoute: typeof PricingRoute
+  ToolsSlugRoute: typeof ToolsSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +143,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-tools': {
+      id: '/ai-tools'
+      path: '/ai-tools'
+      fullPath: '/ai-tools'
+      preLoaderRoute: typeof AiToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/image-tools': {
+      id: '/image-tools'
+      path: '/image-tools'
+      fullPath: '/image-tools'
+      preLoaderRoute: typeof ImageToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pdf-tools': {
+      id: '/pdf-tools'
+      path: '/pdf-tools'
+      fullPath: '/pdf-tools'
+      preLoaderRoute: typeof PdfToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/$slug': {
+      id: '/tools/$slug'
+      path: '/tools/$slug'
+      fullPath: '/tools/$slug'
+      preLoaderRoute: typeof ToolsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  AiToolsRoute: AiToolsRoute,
+  ContactRoute: ContactRoute,
+  ImageToolsRoute: ImageToolsRoute,
+  PdfToolsRoute: PdfToolsRoute,
+  PricingRoute: PricingRoute,
+  ToolsSlugRoute: ToolsSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
