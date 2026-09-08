@@ -10,33 +10,63 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ImageToolsRouteImport } from './routes/image-tools'
+import { Route as PdfToolsRouteImport } from './routes/pdf-tools'
+import { Route as ToolsSlugRouteImport } from './routes/tools.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImageToolsRoute = ImageToolsRouteImport.update({
+  id: '/image-tools',
+  path: '/image-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PdfToolsRoute = PdfToolsRouteImport.update({
+  id: '/pdf-tools',
+  path: '/pdf-tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsSlugRoute = ToolsSlugRouteImport.update({
+  id: '/tools/$slug',
+  path: '/tools/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/image-tools': typeof ImageToolsRoute
+  '/pdf-tools': typeof PdfToolsRoute
+  '/tools/$slug': typeof ToolsSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/image-tools' | '/pdf-tools' | '/tools/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/image-tools' | '/pdf-tools' | '/tools/$slug'
+  id: '__root__' | '/' | '/image-tools' | '/pdf-tools' | '/tools/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ImageToolsRoute: typeof ImageToolsRoute
+  PdfToolsRoute: typeof PdfToolsRoute
+  ToolsSlugRoute: typeof ToolsSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +78,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/image-tools': {
+      id: '/image-tools'
+      path: '/image-tools'
+      fullPath: '/image-tools'
+      preLoaderRoute: typeof ImageToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pdf-tools': {
+      id: '/pdf-tools'
+      path: '/pdf-tools'
+      fullPath: '/pdf-tools'
+      preLoaderRoute: typeof PdfToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/$slug': {
+      id: '/tools/$slug'
+      path: '/tools/$slug'
+      fullPath: '/tools/$slug'
+      preLoaderRoute: typeof ToolsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ImageToolsRoute: ImageToolsRoute,
+  PdfToolsRoute: PdfToolsRoute,
+  ToolsSlugRoute: ToolsSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
