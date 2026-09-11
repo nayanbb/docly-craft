@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Download, Printer, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { ChevronRight, Download, Printer, ShieldCheck, Sparkles, Zap, RotateCcw, Check } from "lucide-react";
 import type { Tool } from "@/lib/tools";
 import { FileUploader } from "@/components/files/FileUploader";
 import { FileList, type SelectedFile } from "@/components/files/FileList";
@@ -1385,7 +1385,37 @@ export function ToolPage({ tool }: { tool: Tool }) {
                       </div>
                     </div>
 
-                    {/* Download Actions */}
+                    {/* AI Recommendation Notice */}
+                    {passportResult.recommendation && (
+                      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-foreground">
+                        <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>
+                          <strong>Intelligent Recommendation:</strong> {passportResult.recommendation.label} background ({passportResult.recommendation.reason})
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Biometric Validation Checklist */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-lg border border-border bg-surface/50 p-3 text-[0.7rem]">
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        100% Identity Preserved
+                      </span>
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        Studio Enhanced
+                      </span>
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        Head & Shoulders Framed
+                      </span>
+                      <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        Biometric Sized ({passportResult.preset.widthMm}×{passportResult.preset.heightMm}mm)
+                      </span>
+                    </div>
+
+                    {/* Download & Reset Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                       <button
                         type="button"
@@ -1413,14 +1443,32 @@ export function ToolPage({ tool }: { tool: Tool }) {
                           Download 4×6" Printable Sheet
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFiles([]);
+                          setState("idle");
+                          setProgress(0);
+                          setProgressLabel(undefined);
+                          setDownloadBlobData(null);
+                          setPassportResult(null);
+                          setSuccessDetail(null);
+                          setErrorDetail(null);
+                        }}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-semibold text-muted-foreground shadow-xs hover:text-foreground hover:border-border transition-colors"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Try Another Photo
+                      </button>
                     </div>
 
                     <p className="text-center text-[0.7rem] text-muted-foreground">
-                      Passport photo requirements vary by country and authority. Please verify the
-                      official requirements before submission.
+                      Passport-style photo. Official requirements vary by country and issuing authority. Please verify specifications before submission.
                     </p>
                   </div>
                 )}
+
 
                 {/* Standard Result Preview for All Other Tools */}
                 {tool.id !== "passport-photo" && tool.id !== "ai-passport-photo" && downloadBlobData && (

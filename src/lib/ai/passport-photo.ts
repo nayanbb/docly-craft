@@ -4,6 +4,16 @@ import {
   hasSufficientUpperBody,
   type FaceDetectionResult,
 } from "./face-detection";
+import {
+  analyzePhotoQuality,
+  type PhotoQualityReport,
+  enhancePortraitNaturally,
+  recommendPassportBackground,
+  type BackgroundRecommendation,
+  decontaminateEdgeFringe,
+  validatePassportOutput,
+  type PassportValidationResult,
+} from "./passport";
 
 export interface PassportPreset {
   id: string;
@@ -71,8 +81,9 @@ export const PASSPORT_PRESETS: PassportPreset[] = [
 
 export interface PassportPhotoConfig {
   presetId: string;
-  backgroundColor: string; // e.g. "#ffffff", "#dbeafe", "#f3f4f6", "#2563eb"
+  backgroundColor?: string; // e.g. "#ffffff", "#dcebfa", "#f3f4f6", "#2563eb"
   generatePrintSheet?: boolean; // 4x6 inch printable grid
+  enableEnhancement?: boolean; // Conservative natural enhancement
 }
 
 export interface PassportPhotoOutput {
@@ -84,6 +95,9 @@ export interface PassportPhotoOutput {
   sheetDataUrl?: string | undefined;
   preset: PassportPreset;
   beforeDataUrl?: string | undefined;
+  qualityReport?: PhotoQualityReport | undefined;
+  validation?: PassportValidationResult | undefined;
+  recommendation?: BackgroundRecommendation | undefined;
 }
 
 export interface FramingCropRect {
@@ -92,6 +106,7 @@ export interface FramingCropRect {
   cropWidth: number;
   cropHeight: number;
 }
+
 
 /**
  * Loads an image Blob into an HTMLImageElement safely.
@@ -429,10 +444,13 @@ export function compositePassportPhoto(
   mCtx.globalCompositeOperation = "destination-in";
   mCtx.drawImage(segmentedCanvas, 0, 0);
 
-  // 3. Render the cleanly masked original subject onto the solid background
+  // 3. Decontaminate perimeter edge fringe to eliminate background spill
+  const cleanedMasked = decontaminateEdgeFringe(maskedSubjectCanvas, targetBg);
+
+  // 4. Render the cleanly masked original subject onto the solid background
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(maskedSubjectCanvas, 0, 0, destW, destH);
+  ctx.drawImage(cleanedMasked, 0, 0, destW, destH);
 
   return destCanvas;
 }
@@ -445,12 +463,19 @@ export function createPrintableSheet(
   singleCanvas: HTMLCanvasElement,
   preset: PassportPreset,
 ): HTMLCanvasElement {
-  const sheet = document.createElement("canvas");
-  sheet.width = 1800; // 6 inches @ 300 DPI
-  sheet.height = 1200; // 4 inches @ 300 DPI
+  let sheet: HTMLCanvasElement;
+  if (typeof document !== "undefined") {
+    sheet = document.createElement("canvas");
+    sheet.width = 1800; // 6 inches @ 300 DPI
+    sheet.height = 1200; // 4 inches @ 300 DPI
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sheet = { ...singleCanvas, width: 1800, height: 1200 } as any;
+  }
 
-  const ctx = sheet.getContext("2d");
-  if (!ctx) return singleCanvas;
+  const ctx = sheet.getContext?.("2d");
+  if (!ctx) return sheet;
+
 
   // Solid white paper
   ctx.fillStyle = "#ffffff";
@@ -509,22 +534,23 @@ export function createPrintableSheet(
  *
  * FULLY AUTOMATIC & IDENTITY PRESERVING:
  * 1. Load Original Image (original source of truth).
- * 2. Validate Image Dimensions & Format.
+ * 2. Analyze Photo Quality (resolution, blur, exposure, bounds, multiple people).
  * 3. Multi-Tier Face & Upper Body Detection (Native / Server-AI / Biometric / Silhouette).
- * 4. Calculate Head + Shoulders Portrait Framing Rectangle.
- * 5. Verify Upper Body information is sufficient.
- * 6. Crop ORIGINAL IMAGE strictly to framing rectangle.
- * 7. Segment background specifically on the cropped portrait.
- * 8. Composite original subject pixels onto user-selected solid background.
- * 9. Resize to biometric passport preset dimensions.
- * 10. Export single passport image + optional 4x6" printable sheet.
+ * 4. Calculate Best-Fit Head + Shoulders Passport Framing.
+ * 5. Crop ORIGINAL IMAGE strictly to framing rectangle.
+ * 6. Segment background specifically on the cropped portrait.
+ * 7. Conservative Natural Image Enhancement (exposure, white balance, denoising, sharpening).
+ * 8. Automatic Background Recommendation & Edge Decontamination.
+ * 9. Composite subject onto clean solid background and resize to preset.
+ * 10. Quality & Face Preservation Check (cross-correlation with original face).
+ * 11. Export single passport image + optional 4x6" printable sheet.
  */
 export async function generatePassportPhoto(
   file: File,
   config: PassportPhotoConfig,
   onProgress?: (percent: number, label?: string) => void,
 ): Promise<PassportPhotoOutput> {
-  onProgress?.(10, "Detecting subject...");
+  onProgress?.(8, "Analyzing photo...");
 
   const preset = PASSPORT_PRESETS.find((p) => p.id === config.presetId) ?? PASSPORT_PRESETS[0]!;
 
@@ -539,21 +565,20 @@ export async function generatePassportPhoto(
   }
   oCtx.drawImage(img, 0, 0);
 
-  // 2. Validate image dimensions
-  if (img.naturalWidth < 150 || img.naturalHeight < 150) {
-    throw new Error(
-      "Image resolution is too low. Please upload a photo with at least 300x300 pixels.",
-    );
+  // 2. Comprehensive Image Quality Analysis
+  const qualityReport = analyzePhotoQuality(origCanvas);
+  if (!qualityReport.isAcceptable && qualityReport.rejectionReason) {
+    throw new Error(qualityReport.rejectionReason);
   }
 
-  onProgress?.(25, "Detecting subject...");
+  onProgress?.(24, "Detecting person...");
 
   // 3. Multi-tier face and upper body detection
   const detection = await detectFaceAndUpperBody(origCanvas);
 
-  onProgress?.(38, "Preparing passport framing...");
+  onProgress?.(40, "Creating passport framing...");
 
-  // 4. Calculate portrait framing rectangle (head + shoulders + upper chest)
+  // 4. Calculate Best-Fit portrait framing rectangle (head + shoulders + upper chest)
   const framing = calculatePassportFraming(
     origCanvas.width,
     origCanvas.height,
@@ -561,37 +586,62 @@ export async function generatePassportPhoto(
     preset,
   );
 
-  onProgress?.(45, "Preparing passport framing...");
-
   // 5. Crop ORIGINAL IMAGE using calculated framing rectangle
   const croppedPortrait = cropOriginalImageToPortrait(origCanvas, framing);
 
-  onProgress?.(55, "Removing background...");
+  onProgress?.(52, "Removing background...");
 
   // 6. Segment background strictly on the cropped portrait
   const segmentedPortrait = await segmentPortraitSubject(croppedPortrait, (pct) =>
-    onProgress?.(pct, "Removing background..."),
+    onProgress?.(Math.round(52 + pct * 0.16), "Removing background..."),
   );
 
-  onProgress?.(85, "Creating final photo...");
+  onProgress?.(72, "Enhancing image...");
 
-  // 7. Composite original subject onto solid background and resize to preset
+  // 7. Conservative Natural Image Enhancement (Exposure, White Balance, Bilateral Denoising, Unsharp Mask)
+  // Strictly preserves 100% of facial features, lines, and identity
+  const enhancedPortrait =
+    config.enableEnhancement !== false
+      ? enhancePortraitNaturally(croppedPortrait)
+      : croppedPortrait;
+
+  // 8. Background Recommendation & Selection
+  const recommendation = recommendPassportBackground(origCanvas, detection);
+  const targetBgColor = config.backgroundColor || recommendation.recommendedColor || "#ffffff";
+
+  onProgress?.(84, "Creating passport framing...");
+
+  // 9. Composite enhanced subject onto solid background and resize to preset
   const finalCanvas = compositePassportPhoto(
-    croppedPortrait,
+    enhancedPortrait,
     segmentedPortrait,
     preset,
-    config.backgroundColor || "#ffffff",
+    targetBgColor,
   );
 
-  onProgress?.(92, "Creating final photo...");
+  onProgress?.(92, "Checking final photo...");
 
-  // 8. Export single passport photo JPEG
+  // 10. Quality & Face Preservation Validation
+  const validation = validatePassportOutput(
+    croppedPortrait,
+    finalCanvas,
+    preset,
+    detection,
+    framing,
+  );
+
+  if (!validation.valid && validation.error) {
+    throw new Error(validation.error);
+  }
+
+  // 11. Export single passport photo JPEG
   const singleBlob = await canvasToBlob(finalCanvas, "image/jpeg", 0.96);
   const singleDataUrl = await blobToDataUrl(singleBlob);
+  const beforeDataUrl = await blobToDataUrl(file);
   const baseName = file.name.replace(/\.[^/.]+$/, "");
   const singleFilename = `${baseName}-${preset.id}-passport.jpg`;
 
-  // 9. Optional printable 4x6" sheet
+  // 12. Optional printable 4x6" sheet
   let sheetBlob: Blob | undefined;
   let sheetFilename: string | undefined;
   let sheetDataUrl: string | undefined;
@@ -603,7 +653,7 @@ export async function generatePassportPhoto(
     sheetDataUrl = await blobToDataUrl(sheetBlob);
   }
 
-  onProgress?.(100);
+  onProgress?.(100, "Ready");
 
   return {
     singleBlob,
@@ -613,5 +663,10 @@ export async function generatePassportPhoto(
     sheetFilename,
     sheetDataUrl,
     preset,
+    beforeDataUrl,
+    qualityReport,
+    validation,
+    recommendation,
   };
 }
+

@@ -153,6 +153,23 @@ export function PassportPhotoOptions({ config, onChange }: PassportPhotoOptionsP
         </div>
       </div>
 
+      {/* Studio Enhancement Toggle */}
+      <label className="flex items-center gap-2.5 cursor-pointer rounded-lg border border-border bg-surface p-3 text-xs font-medium text-foreground transition-colors hover:border-primary/40">
+        <input
+          type="checkbox"
+          checked={config.enableEnhancement ?? true}
+          onChange={(e) => onChange({ ...config, enableEnhancement: e.target.checked })}
+          className="rounded border-input text-primary focus:ring-primary"
+        />
+        <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+        <div>
+          <span className="block font-semibold">Natural Studio Enhancement</span>
+          <span className="block text-[0.7rem] text-muted-foreground mt-0.5">
+            Conservative exposure normalization, neutral white balance, and crispness optimization without modifying facial features or identity.
+          </span>
+        </div>
+      </label>
+
       {/* 4x6 Printable Sheet Toggle */}
       <label className="flex items-center gap-2.5 cursor-pointer rounded-lg border border-border bg-surface p-3 text-xs font-medium text-foreground transition-colors hover:border-primary/40">
         <input
@@ -173,3 +190,4 @@ export function PassportPhotoOptions({ config, onChange }: PassportPhotoOptionsP
     </div>
   );
 }
+
