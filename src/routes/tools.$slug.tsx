@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ToolPage } from "@/components/tool/ToolPage";
 import { toolBySlug } from "@/lib/tools";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 export const Route = createFileRoute("/tools/$slug")({
   loader: ({ params }) => {
@@ -32,7 +33,14 @@ function ToolRoute() {
   const { slug } = Route.useParams();
   const tool = toolBySlug(slug);
   if (!tool) return <ToolNotFound />;
-  return <ToolPage tool={tool} />;
+  return (
+    <ErrorBoundary
+      fallbackTitle={`${tool.name} encountered an issue`}
+      fallbackMessage="We couldn't process this tool view. Your files were not uploaded or stored. You can try again or explore other tools."
+    >
+      <ToolPage tool={tool} />
+    </ErrorBoundary>
+  );
 }
 
 function ToolNotFound() {

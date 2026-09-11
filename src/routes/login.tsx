@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/supabase/auth-context";
 import { formatAuthError } from "@/lib/supabase/client";
 import { sanitizeRedirectPath } from "@/lib/auth/require-auth";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { Logo } from "@/components/brand/Logo";
 import { toast } from "sonner";
 
 interface LoginSearch {
@@ -128,10 +129,10 @@ function LoginPage() {
     <div className="container-page py-12 sm:py-16">
       <div className="mx-auto max-w-md space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-primary/25 bg-accent text-primary shadow-xs">
-            <KeyRound className="h-6 w-6" />
-          </span>
+        <div className="text-center space-y-3">
+          <div className="flex justify-center pb-2">
+            <Logo size="lg" />
+          </div>
           <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
             Sign in to Docly
           </h1>

@@ -93,19 +93,32 @@ export function countProminentFaces(
   sampleW: number,
   sampleH: number,
 ): number {
-  const minClusterArea = 220;
+  const minClusterArea = 260;
   const visited = new Uint8Array(sampleW * sampleH);
-  const faceCenters: Array<{ x: number; y: number; count: number }> = [];
+  interface Cluster {
+    x: number;
+    y: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    count: number;
+  }
+  const clusters: Cluster[] = [];
 
   const searchLimitH = Math.round(sampleH * 0.75);
 
-  for (let y = 10; y < searchLimitH; y += 4) {
-    for (let x = 10; x < sampleW - 10; x += 4) {
+  for (let y = 8; y < searchLimitH; y += 4) {
+    for (let x = 8; x < sampleW - 8; x += 4) {
       const idx = y * sampleW + x;
       if (skinMap[idx] === 1 && visited[idx] === 0) {
         let clusterCount = 0;
         let sumX = 0;
         let sumY = 0;
+        let minX = x;
+        let maxX = x;
+        let minY = y;
+        let maxY = y;
 
         const queue: Array<[number, number]> = [[x, y]];
         visited[idx] = 1;
@@ -115,6 +128,10 @@ export function countProminentFaces(
           clusterCount++;
           sumX += cx;
           sumY += cy;
+          if (cx < minX) minX = cx;
+          if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy;
+          if (cy > maxY) maxY = cy;
 
           const neighbors: Array<[number, number]> = [
             [cx + 2, cy],
@@ -134,10 +151,16 @@ export function countProminentFaces(
           }
         }
 
-        if (clusterCount >= minClusterArea) {
-          faceCenters.push({
+        const w = maxX - minX;
+        const h = maxY - minY;
+        if (clusterCount >= minClusterArea && w >= 14 && h >= 16) {
+          clusters.push({
             x: Math.round(sumX / clusterCount),
             y: Math.round(sumY / clusterCount),
+            minX,
+            maxX,
+            minY,
+            maxY,
             count: clusterCount,
           });
         }
@@ -145,18 +168,36 @@ export function countProminentFaces(
     }
   }
 
-  // Count distinct faces that are separated by distance (> 65px on 360px sample grid)
-  const distinctFaces: Array<{ x: number; y: number }> = [];
-  for (const c of faceCenters) {
-    const isCloseToExisting = distinctFaces.some(
-      (df) => Math.hypot(df.x - c.x, df.y - c.y) < 65,
-    );
-    if (!isCloseToExisting) {
-      distinctFaces.push({ x: c.x, y: c.y });
+  if (clusters.length <= 1) return Math.max(1, clusters.length);
+
+  // Sort by cluster size descending (largest face first)
+  clusters.sort((a, b) => b.count - a.count);
+  const primary = clusters[0]!;
+
+  // Count only competing prominent heads:
+  // Must be >= 50% size of primary, not situated directly underneath primary (neck/chest/torso),
+  // and separated horizontally
+  const prominentHeads = [primary];
+  for (let i = 1; i < clusters.length; i++) {
+    const c = clusters[i]!;
+    // Discard tiny background patches / hands / ears
+    if (c.count < primary.count * 0.50) continue;
+
+    // Discard neck/chest of same person (similar X, but lower Y)
+    const isUnderPrimary = Math.abs(c.x - primary.x) < 45 && c.y > primary.y;
+    if (isUnderPrimary) continue;
+
+    // Discard hands resting at hips (much lower down)
+    if (c.y > primary.y + 100) continue;
+
+    // Must have horizontal separation indicating a different person standing alongside
+    const dist = Math.hypot(c.x - primary.x, c.y - primary.y);
+    if (dist > 50) {
+      prominentHeads.push(c);
     }
   }
 
-  return Math.max(1, distinctFaces.length);
+  return prominentHeads.length;
 }
 
 /**
@@ -169,7 +210,7 @@ export function analyzePhotoQuality(
   const height = canvas.height;
 
   // 1. Resolution Check
-  const minDimension = 220;
+  const minDimension = 200;
   const isResolutionAdequate = width >= minDimension && height >= minDimension;
 
   // 2. Grayscale & Luminance Map (downscaled to sample grid for rapid, uniform processing)
@@ -213,10 +254,12 @@ export function analyzePhotoQuality(
     lumSum += lum;
     lumSqSum += lum * lum;
 
-    // YCbCr skin detection
+    // YCbCr & RGB skin detection
     const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
     const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-    if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173 && r > g && g > b) {
+    const isYCbCr = cb >= 70 && cb <= 140 && cr >= 125 && cr <= 180;
+    const isRgb = r > 50 && g > 35 && b > 20 && r > g && r > b && Math.max(r, g, b) - Math.min(r, g, b) > 10;
+    if (isYCbCr || isRgb) {
       skinMap[i] = 1;
     }
   }
@@ -227,44 +270,21 @@ export function analyzePhotoQuality(
   const stdDev = Math.sqrt(Math.max(0, lumVariance));
   const contrastRatio = stdDev / (meanLuminance || 1);
 
-  // Severe under/overexposure
-  const isUnderExposed = meanLuminance < 32;
-  const isOverExposed = meanLuminance > 242 && stdDev < 18;
+  // Severe under/overexposure (only extreme unrecoverable cases)
+  const isUnderExposed = meanLuminance < 20;
+  const isOverExposed = meanLuminance > 248 && stdDev < 12;
 
   // 3. Sharpness / Blur Detection via Laplacian variance
   const blurVariance = computeLaplacianVariance(gray, sampleW, sampleH);
-  const isSharp = blurVariance >= 35;
+  const isSharp = blurVariance >= 25;
 
-  // 4. Multiple People Check
+  // 4. Multiple People Advisory Check
   const faceCount = countProminentFaces(skinMap, sampleW, sampleH);
   const multiplePeopleDetected = faceCount > 1;
 
   // 5. Edge Proximity
   const clippedEdges: Array<"top" | "bottom" | "left" | "right"> = [];
-  const edgeMarginX = Math.max(3, Math.round(sampleW * 0.02));
-  const edgeMarginY = Math.max(3, Math.round(sampleH * 0.02));
-
-  let leftEdgeSkin = 0;
-  let rightEdgeSkin = 0;
-  let topEdgeSkin = 0;
-
-  for (let y = 0; y < Math.round(sampleH * 0.5); y++) {
-    for (let x = 0; x < edgeMarginX; x++) {
-      if (skinMap[y * sampleW + x] === 1) leftEdgeSkin++;
-      if (skinMap[y * sampleW + (sampleW - 1 - x)] === 1) rightEdgeSkin++;
-    }
-  }
-  for (let y = 0; y < edgeMarginY; y++) {
-    for (let x = Math.round(sampleW * 0.25); x < Math.round(sampleW * 0.75); x++) {
-      if (skinMap[y * sampleW + x] === 1) topEdgeSkin++;
-    }
-  }
-
-  if (leftEdgeSkin > 35) clippedEdges.push("left");
-  if (rightEdgeSkin > 35) clippedEdges.push("right");
-  if (topEdgeSkin > 30) clippedEdges.push("top");
-
-  const isTooCloseToEdge = clippedEdges.length > 0;
+  const isTooCloseToEdge = false; // Edge handling is handled dynamically by smart crop
 
   // Assemble Decision
   let isAcceptable = true;
@@ -273,8 +293,8 @@ export function analyzePhotoQuality(
   if (!isResolutionAdequate) {
     isAcceptable = false;
     rejectionReason =
-      "The photo quality is too low to safely create a natural passport photo. Please upload a clearer photo.";
-  } else if (!isSharp && blurVariance < 20) {
+      "The original photo resolution is too low to create a high-quality passport photo.";
+  } else if (!isSharp && blurVariance < 10) {
     isAcceptable = false;
     rejectionReason =
       "The photo quality is too low to safely create a natural passport photo. Please upload a clearer photo.";
@@ -282,14 +302,6 @@ export function analyzePhotoQuality(
     isAcceptable = false;
     rejectionReason =
       "The photo quality is too low to safely create a natural passport photo. Please upload a clearer photo.";
-  } else if (multiplePeopleDetected) {
-    isAcceptable = false;
-    rejectionReason =
-      "Multiple people detected. Please upload a photo containing only the person you want to use.";
-  } else if (isTooCloseToEdge && (clippedEdges.includes("left") || clippedEdges.includes("right"))) {
-    isAcceptable = false;
-    rejectionReason =
-      "The detected subject is too close to the image edge. Please upload a photo with centered framing.";
   }
 
   return {

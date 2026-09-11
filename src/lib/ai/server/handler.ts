@@ -389,14 +389,22 @@ export async function handleAiDetectFramingRequest(
     const apiKey = (provider as unknown as { apiKey: string }).apiKey;
     const model = (provider as unknown as { model: string }).model || "gemini-2.5-flash";
 
-    const promptText = `Analyze this image to locate the primary human subject for biometric passport framing.
-Detect the face box, the head (from crown of hair to chin), and the shoulder line.
-Return ONLY a valid, raw JSON object with normalized coordinates between 0.0 and 1.0 without markdown formatting:
+    const promptText = `Analyze this photograph to locate the primary human subject for biometric passport framing.
+The photo may be full-body, medium-distance, or a portrait taken in a mall, room, outdoors, or casual setting with large background.
+1. Find the PRIMARY person (largest, most prominent foreground subject). Discard tiny distant background bystanders, reflections, or background posters.
+2. If there are TWO or MORE equally prominent, similarly sized foreground subjects, set multipleProminentPeople: true. Otherwise false.
+3. Locate the primary subject's:
+   - faceBox: {x, y, width, height} tight around forehead, cheeks, chin.
+   - headBox: {x, y, width, height} from crown of hair/head to chin tip.
+   - shouldersBox: {x, y, width, height} across left to right shoulder line and upper chest.
+   - hasUpperBody: true if head, neck, and shoulders are in the photograph.
+Return ONLY raw JSON with normalized coordinates between 0.0 and 1.0 without markdown formatting:
 {
   "faceBox": { "x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0 },
   "headBox": { "x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0 },
   "shouldersBox": { "x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0 },
-  "hasUpperBody": true
+  "hasUpperBody": true,
+  "multipleProminentPeople": false
 }`;
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -474,9 +482,9 @@ function parsePages(pages: unknown): ServerChatContextPage[] {
 }
 
 function formatAiError(err: unknown): Response {
-  console.error("Docly AI execution error:", err);
   const rawMsg = err instanceof Error ? err.message : String(err);
   let safeMessage = "Failed to process AI request. Please try again.";
+  let code = "AI_PROCESSING_FAILED";
   let statusCode = 500;
 
   if (
@@ -486,6 +494,7 @@ function formatAiError(err: unknown): Response {
   ) {
     safeMessage =
       "AI service is currently rate limited or quota exceeded. Please try again in a few moments.";
+    code = "RATE_LIMITED";
     statusCode = 429;
   } else if (
     rawMsg.includes("401") ||
@@ -493,7 +502,8 @@ function formatAiError(err: unknown): Response {
     rawMsg.toLowerCase().includes("invalid api key")
   ) {
     safeMessage =
-      "AI authentication failed. Please verify the API key configured in your server environment (.env).";
+      "AI service authentication failed. Please verify the API key configured in your server environment.";
+    code = "AUTH_FAILED";
     statusCode = 502;
   } else if (
     rawMsg.toLowerCase().includes("timeout") ||
@@ -501,15 +511,22 @@ function formatAiError(err: unknown): Response {
   ) {
     safeMessage =
       "Connection to AI provider timed out. Please check your network connection and try again.";
+    code = "PROCESSING_TIMEOUT";
     statusCode = 504;
-  } else if (rawMsg.length < 200 && !rawMsg.includes("http") && !rawMsg.includes("key")) {
-    safeMessage = rawMsg;
   }
 
-  return new Response(JSON.stringify({ error: safeMessage }), {
-    status: statusCode,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: safeMessage,
+      code,
+      message: safeMessage,
+    }),
+    {
+      status: statusCode,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }
 
 /**

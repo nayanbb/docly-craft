@@ -86,6 +86,7 @@ import {
   handleAdminPaymentsRequest,
   handleAdminSubscriptionsRequest,
 } from "./lib/admin/server-handler";
+import { handleContactFormRequest } from "./lib/contact/server-handler";
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
@@ -154,6 +155,11 @@ export default {
       }
       if (url.pathname === "/api/admin/subscriptions") {
         return await handleAdminSubscriptionsRequest(request, env);
+      }
+
+      // Contact Form & Diagnostic Endpoints
+      if (url.pathname === "/api/contact" || url.pathname === "/api/contact/diagnostic") {
+        return await handleContactFormRequest(request, env);
       }
 
       const handler = await getServerEntry();

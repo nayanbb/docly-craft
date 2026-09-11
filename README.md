@@ -992,15 +992,7 @@ Do not implement real processing yet.
 
 Focus on a polished, scalable, production-quality frontend that will later be connected to real PDF processing, image processing and AI services by our engineering workflow.
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/8a1a00ab-8a31-40b1-8b0b-e87c968042c5).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+This project is Docly — an all-in-one document productivity workspace for PDFs, images, office conversions, and AI tools.
 
 ## Development
 

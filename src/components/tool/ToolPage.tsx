@@ -15,8 +15,8 @@ import {
 } from "@/components/files/ToolStates";
 
 // Universal Download & Validation
-import { downloadBlob, downloadZip, createZipBlob } from "@/lib/files/download";
-import { validatePdfFile, validateImageFile } from "@/lib/files/validation";
+import { downloadBlob, downloadZip, createZipBlob, downloadValidatedBlob } from "@/lib/files/download";
+import { validatePdfFile, validateImageFile, validateOfficeDocument } from "@/lib/files/validation";
 import { formatBytes } from "@/lib/format";
 
 // PDF Engines
@@ -243,6 +243,8 @@ export function ToolPage({ tool }: { tool: Tool }) {
 
   const filesRef = useRef<SelectedFile[]>(files);
   filesRef.current = files;
+  const isProcessingRef = useRef<boolean>(false);
+  const isDownloadingRef = useRef<boolean>(false);
 
   const Icon = tool.icon;
   const parent = groupLabel[tool.group];
@@ -280,9 +282,10 @@ export function ToolPage({ tool }: { tool: Tool }) {
     const first = files[0];
     if (!first) return;
 
-    if (first.file.type.startsWith("image/")) {
+    if (first.file.type.startsWith("image/") || first.file.name.match(/\.(jpe?g|png|webp)$/i)) {
       const img = new Image();
-      img.src = URL.createObjectURL(first.file);
+      const previewSrc = URL.createObjectURL(first.file);
+      img.src = previewSrc;
       img.onload = () => {
         setResizeOpts((prev) => ({
           ...prev,
@@ -295,7 +298,10 @@ export function ToolPage({ tool }: { tool: Tool }) {
           width: img.naturalWidth,
           height: img.naturalHeight,
         });
-        URL.revokeObjectURL(img.src);
+        URL.revokeObjectURL(previewSrc);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(previewSrc);
       };
     } else if (first.file.name.toLowerCase().endsWith(".pdf")) {
       // Extract text locally in background for AI tools
@@ -350,10 +356,17 @@ export function ToolPage({ tool }: { tool: Tool }) {
           setState("error");
           return;
         }
-      } else if (f.type.startsWith("image/")) {
+      } else if (f.type.startsWith("image/") || f.name.match(/\.(jpe?g|png|webp)$/i)) {
         const check = await validateImageFile(f);
         if (!check.valid) {
           setErrorDetail(check.error ?? "Invalid image file.");
+          setState("error");
+          return;
+        }
+      } else if (f.name.match(/\.(docx?|xlsx?|pptx?)$/i)) {
+        const check = await validateOfficeDocument(f);
+        if (!check.valid) {
+          setErrorDetail(check.error ?? "Invalid Office document.");
           setState("error");
           return;
         }
@@ -404,6 +417,9 @@ export function ToolPage({ tool }: { tool: Tool }) {
     if (files.length === 0) return;
     const firstFile = files[0]?.file;
     if (!firstFile) return;
+
+    if (state === "loading" || isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
     setState("loading");
     setErrorDetail(null);
@@ -834,8 +850,8 @@ export function ToolPage({ tool }: { tool: Tool }) {
       }
 
       // 31. AI PASSPORT PHOTO (FLAGSHIP)
-      else if (tool.id === "passport-photo") {
-        setProgressLabel("Detecting subject...");
+      else if (tool.id === "passport-photo" || tool.id === "ai-passport-photo") {
+        setProgressLabel("Analyzing photo...");
         const res = await generatePassportPhoto(firstFile, passportConfig, (pct, lbl) => {
           setProgress(pct);
           if (lbl) setProgressLabel(lbl);
@@ -1004,12 +1020,23 @@ export function ToolPage({ tool }: { tool: Tool }) {
           : "An unexpected error occurred during processing. Please verify the files and try again.";
       setErrorDetail(msg);
       setState("error");
+    } finally {
+      isProcessingRef.current = false;
     }
   };
 
-  const handleDownloadClick = () => {
-    if (downloadBlobData) {
-      downloadBlob(downloadBlobData, downloadName);
+  const handleDownloadClick = async () => {
+    if (!downloadBlobData || isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
+    try {
+      await downloadValidatedBlob(downloadBlobData, downloadName);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Download failed.";
+      toast.error("Download failed", { description: msg });
+    } finally {
+      setTimeout(() => {
+        isDownloadingRef.current = false;
+      }, 1200);
     }
   };
 
@@ -1326,7 +1353,7 @@ export function ToolPage({ tool }: { tool: Tool }) {
                 />
 
                 {/* AI Passport Photo Dedicated Before / After Preview */}
-                {tool.id === "passport-photo" && passportResult && (
+                {(tool.id === "passport-photo" || tool.id === "ai-passport-photo") && passportResult && (
                   <div className="w-full rounded-2xl border border-border bg-card p-5 shadow-sm space-y-5">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
                       <div className="flex items-center gap-2">

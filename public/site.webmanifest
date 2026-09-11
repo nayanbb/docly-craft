@@ -1,0 +1,26 @@
+{
+  "name": "Docly — PDF, Image & AI Tools",
+  "short_name": "Docly",
+  "description": "Everything you need to work with PDFs, images and documents.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32 48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

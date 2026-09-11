@@ -30,3 +30,10 @@ DOCLY_CONVERTER_URL=http://localhost:8001
 # SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 # ADMIN_EMAILS=admin@docly.com
 
+# -----------------------------------------------------------------------------
+# Contact Form & Transactional Email Delivery (Resend)
+# -----------------------------------------------------------------------------
+# RESEND_API_KEY=re_your_resend_api_key_here
+# RESEND_FROM_EMAIL="Docly Contact <onboarding@resend.dev>"
+# CONTACT_RECIPIENT_EMAIL=nayanbhatkhade8530@gmail.com
+

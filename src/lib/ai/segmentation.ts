@@ -218,6 +218,7 @@ export async function removeImageBackground(
   try {
     const { removeBackground } = await import("@imgly/background-removal");
     cutoutBlob = await removeBackground(inputBlob, {
+      publicPath: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/",
       model: "isnet_quint8",
       output: { format: "image/png" },
       progress: (_key, cur, tot) => {

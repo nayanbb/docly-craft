@@ -15,10 +15,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { useSubscription, triggerSubscriptionRefresh } from "@/lib/monetization/subscription";
 import { cancelRazorpaySubscription } from "@/lib/razorpay/service";
 import { formatBillingDate } from "@/lib/monetization/plan";
+import { Logo } from "@/components/brand/Logo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/account")({
@@ -42,7 +44,12 @@ export const Route = createFileRoute("/account")({
 function AccountRoute() {
   return (
     <ProtectedRoute>
-      <AccountView />
+      <ErrorBoundary
+        fallbackTitle="Account settings unavailable"
+        fallbackMessage="We couldn't load your account details. Your credentials and session remain secure. You can try refreshing or go to home."
+      >
+        <AccountView />
+      </ErrorBoundary>
     </ProtectedRoute>
   );
 }
@@ -179,9 +186,13 @@ function AccountView() {
             <span>/</span>
             <span className="text-foreground font-medium">Account Settings</span>
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
-            Account & Security
-          </h1>
+          <div className="flex items-center gap-3">
+            <Logo size="md" />
+            <span className="text-muted-foreground/30 text-xl font-light hidden sm:inline">|</span>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
+              Account & Security
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

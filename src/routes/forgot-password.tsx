@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Mail, ArrowRight, AlertCircle, KeyRound, CheckCircle2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/supabase/auth-context";
+import { Logo } from "@/components/brand/Logo";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
@@ -54,10 +55,10 @@ function ForgotPasswordPage() {
     <div className="container-page py-12 sm:py-16">
       <div className="mx-auto max-w-md space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-primary/25 bg-accent text-primary shadow-xs">
-            <KeyRound className="h-6 w-6" />
-          </span>
+        <div className="text-center space-y-3">
+          <div className="flex justify-center pb-2">
+            <Logo size="lg" />
+          </div>
           <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
             Reset your password
           </h1>

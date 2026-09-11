@@ -171,6 +171,18 @@ function canvasToBlob(
  * 6. Never stretches or distorts original pixels.
  * 7. Fails gracefully if upper-body information is insufficient.
  */
+/**
+ * Calculates dynamic Best-Fit passport framing rectangle (Head + Neck + Shoulders).
+ *
+ * Requirements:
+ * 1. Centers the face horizontally where possible.
+ * 2. Dynamically shifts crop window when subject is off-center or near an edge.
+ * 3. Never fails simply because subject is off-center or near an edge.
+ * 4. Automatically calculates headroom (~8%-12%) and head-to-frame ratio (~50%-60%).
+ * 5. Exactly matches the target aspect ratio of the passport preset.
+ * 6. Never stretches or distorts original pixels.
+ * 7. Fails gracefully only if source image lacks sufficient face/head pixels.
+ */
 export function calculatePassportFraming(
   imgWidth: number,
   imgHeight: number,
@@ -179,9 +191,9 @@ export function calculatePassportFraming(
 ): FramingCropRect {
   const fBox = detection.faceBox;
   const faceCenterX = fBox.x + fBox.width / 2;
-  const chinY = fBox.y + fBox.height;
-  const crownY = detection.headBox.y;
-  const headH = Math.max(35, chinY - crownY);
+  const crownY = Math.max(0, detection.headBox.y);
+  const chinY = Math.min(imgHeight, fBox.y + fBox.height);
+  const headH = Math.max(25, chinY - crownY);
 
   // Validate sufficient upper body
   if (!hasSufficientUpperBody(chinY, headH, imgHeight)) {
@@ -192,70 +204,93 @@ export function calculatePassportFraming(
 
   const targetAspect = preset.widthPx / preset.heightPx;
 
-  // In international biometric passports, head height occupies ~54% of photo height
+  // Biometric head-to-frame ratio: head height occupies ~54% of photo height
   const targetHeadRatio = 0.54;
   const targetHeadroomRatio = 0.095; // ~9.5% headroom above hair crown
 
   let cropHeight = headH / targetHeadRatio;
   let cropWidth = cropHeight * targetAspect;
 
-  // Ideal crop vertical positioning
-  let cropTop = crownY - cropHeight * targetHeadroomRatio;
-  let cropBottom = cropTop + cropHeight;
-
-  // Boundary checks & adjustments
-  // 1. If cropTop < 0, shift down within available image bounds
-  if (cropTop < 0) {
-    const shift = -cropTop;
-    cropTop = 0;
-    cropBottom += shift;
-  }
-
-  // 2. If cropBottom exceeds image height, check if we still have adequate upper body
-  if (cropBottom > imgHeight) {
-    // Check if chin + 35% headH is visible
-    const minRequiredBottom = chinY + headH * 0.35;
-    if (minRequiredBottom > imgHeight) {
-      throw new Error(
-        "Your photo does not contain enough suitable upper-body area for a passport-style crop. Please upload a clearer photo.",
-      );
-    }
-    // Anchor bottom at image boundary and adjust crop height & width
-    cropBottom = imgHeight;
-    cropHeight = Math.min(imgHeight, cropBottom - cropTop);
+  // Adapt if ideal crop height exceeds available image height
+  if (cropHeight > imgHeight) {
+    cropHeight = Math.min(imgHeight, Math.max(headH * 1.12, imgHeight));
     cropWidth = cropHeight * targetAspect;
   }
 
-  // 3. Horizontal positioning: center on face
+  // Adapt if ideal crop width exceeds available image width
+  if (cropWidth > imgWidth) {
+    cropWidth = imgWidth;
+    cropHeight = cropWidth / targetAspect;
+  }
+
+  // Vertical positioning: headroom above crown
+  let cropTop = crownY - cropHeight * targetHeadroomRatio;
+  let cropBottom = cropTop + cropHeight;
+
+  if (cropTop < 0) {
+    cropTop = 0;
+    cropBottom = cropTop + cropHeight;
+  }
+
+  if (cropBottom > imgHeight) {
+    cropBottom = imgHeight;
+    cropTop = Math.max(0, cropBottom - cropHeight);
+    // If anchored to bottom, ensure crown remains within crop
+    if (cropTop > crownY) {
+      cropTop = Math.max(0, crownY - Math.round(cropHeight * 0.04));
+      cropBottom = Math.min(imgHeight, cropTop + cropHeight);
+    }
+  }
+
+  // Horizontal positioning: centered on face, with edge-aware window shifting
   let cropLeft = faceCenterX - cropWidth / 2;
   let cropRight = cropLeft + cropWidth;
 
   if (cropLeft < 0) {
-    const shift = -cropLeft;
+    // Subject near left edge: shift window right to use available valid pixels
     cropLeft = 0;
-    cropRight = Math.min(imgWidth, cropRight + shift);
-    cropWidth = cropRight - cropLeft;
-    cropHeight = cropWidth / targetAspect;
+    cropRight = Math.min(imgWidth, cropWidth);
   } else if (cropRight > imgWidth) {
-    const shift = cropRight - imgWidth;
+    // Subject near right edge: shift window left to use available valid pixels
     cropRight = imgWidth;
-    cropLeft = Math.max(0, cropLeft - shift);
-    cropWidth = cropRight - cropLeft;
-    cropHeight = cropWidth / targetAspect;
+    cropLeft = Math.max(0, imgWidth - cropWidth);
   }
 
-  // Final sanity validation: ensure head is not truncated
-  if (cropWidth < headH || cropHeight < headH * 1.3) {
+  // Enforce exact preset aspect ratio without distortion
+  let finalWidth = cropRight - cropLeft;
+  let finalHeight = finalWidth / targetAspect;
+
+  if (finalHeight > imgHeight) {
+    finalHeight = imgHeight;
+    finalWidth = finalHeight * targetAspect;
+    cropLeft = Math.max(0, Math.min(imgWidth - finalWidth, faceCenterX - finalWidth / 2));
+    cropTop = Math.max(0, Math.min(imgHeight - finalHeight, crownY - finalHeight * targetHeadroomRatio));
+  } else {
+    // Center the adjusted height on head
+    const verticalDiff = finalHeight - (cropBottom - cropTop);
+    if (verticalDiff > 0) {
+      cropTop = Math.max(0, cropTop - verticalDiff / 2);
+    }
+  }
+
+  // Validate that the face is actually within the crop
+  const finalRight = cropLeft + finalWidth;
+  const isFaceInside =
+    fBox.x + fBox.width * 0.5 >= cropLeft &&
+    fBox.x + fBox.width * 0.5 <= finalRight &&
+    finalWidth >= fBox.width * 0.75;
+
+  if (!isFaceInside) {
     throw new Error(
-      "The detected subject is too close to the image edge. Please upload a photo with centered framing.",
+      "The photo does not contain enough space around the face for a natural passport crop. Please upload a photo with more of the head and shoulders visible.",
     );
   }
 
   return {
     cropX: Math.max(0, Math.round(cropLeft)),
     cropY: Math.max(0, Math.round(cropTop)),
-    cropWidth: Math.round(cropWidth),
-    cropHeight: Math.round(cropHeight),
+    cropWidth: Math.max(20, Math.round(finalWidth)),
+    cropHeight: Math.max(20, Math.round(finalHeight)),
   };
 }
 
@@ -369,6 +404,7 @@ export async function segmentPortraitSubject(
 
     const { removeBackground } = await import("@imgly/background-removal");
     const removedBlob = await removeBackground(croppedFile, {
+      publicPath: "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/",
       model: "isnet_quint8",
       output: { format: "image/png" },
       progress: (_key, cur, tot) => {
@@ -571,12 +607,21 @@ export async function generatePassportPhoto(
     throw new Error(qualityReport.rejectionReason);
   }
 
-  onProgress?.(24, "Detecting person...");
+  onProgress?.(18, "Detecting primary person...");
 
   // 3. Multi-tier face and upper body detection
   const detection = await detectFaceAndUpperBody(origCanvas);
 
-  onProgress?.(40, "Creating passport framing...");
+  // Check if multiple prominent people exist (tiny background bystanders are already filtered)
+  if (detection.multipleProminentPeople) {
+    throw new Error(
+      "Multiple people detected. Please upload a photo containing only the person you want to use.",
+    );
+  }
+
+  onProgress?.(32, "Finding face and shoulders...");
+
+  onProgress?.(44, "Calculating best framing...");
 
   // 4. Calculate Best-Fit portrait framing rectangle (head + shoulders + upper chest)
   const framing = calculatePassportFraming(
@@ -589,11 +634,11 @@ export async function generatePassportPhoto(
   // 5. Crop ORIGINAL IMAGE using calculated framing rectangle
   const croppedPortrait = cropOriginalImageToPortrait(origCanvas, framing);
 
-  onProgress?.(52, "Removing background...");
+  onProgress?.(55, "Removing background...");
 
   // 6. Segment background strictly on the cropped portrait
   const segmentedPortrait = await segmentPortraitSubject(croppedPortrait, (pct) =>
-    onProgress?.(Math.round(52 + pct * 0.16), "Removing background..."),
+    onProgress?.(Math.round(55 + pct * 0.15), "Removing background..."),
   );
 
   onProgress?.(72, "Enhancing image...");
@@ -609,7 +654,7 @@ export async function generatePassportPhoto(
   const recommendation = recommendPassportBackground(origCanvas, detection);
   const targetBgColor = config.backgroundColor || recommendation.recommendedColor || "#ffffff";
 
-  onProgress?.(84, "Creating passport framing...");
+  onProgress?.(84, "Creating passport frame...");
 
   // 9. Composite enhanced subject onto solid background and resize to preset
   const finalCanvas = compositePassportPhoto(
@@ -619,7 +664,7 @@ export async function generatePassportPhoto(
     targetBgColor,
   );
 
-  onProgress?.(92, "Checking final photo...");
+  onProgress?.(92, "Checking final quality...");
 
   // 10. Quality & Face Preservation Validation
   const validation = validatePassportOutput(

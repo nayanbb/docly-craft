@@ -1,11 +1,11 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "docly-craft",
   "private": true,
   "sideEffects": false,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && node scripts/clean-build-assets.js",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

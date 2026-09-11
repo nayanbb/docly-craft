@@ -13,8 +13,8 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { AuthProvider } from "@/lib/supabase/auth-context";
 import { Toaster } from "@/components/ui/sonner";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -39,11 +39,8 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+  console.error("[Docly Root Error Boundary]:", error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center bg-background px-4 py-16">
@@ -105,7 +102,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/site.webmanifest" },
     ],
   }),
   shellComponent: RootShell,
@@ -132,17 +132,19 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <div className="flex min-h-screen flex-col bg-background text-foreground">
-          <Header />
-          <main className="flex-1">
-            <Outlet />
-          </main>
-          <Footer />
-        </div>
-        <Toaster position="top-center" richColors />
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <div className="flex min-h-screen flex-col bg-background text-foreground">
+            <Header />
+            <main className="flex-1">
+              <Outlet />
+            </main>
+            <Footer />
+          </div>
+          <Toaster position="top-center" richColors />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

@@ -12,11 +12,13 @@ import {
   Wrench,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { useSubscription } from "@/lib/monetization/subscription";
 import { formatBillingDate } from "@/lib/monetization/plan";
 import { popularTools, tools } from "@/lib/tools";
 import { ToolCard } from "@/components/ToolCard";
+import { Logo } from "@/components/brand/Logo";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -39,7 +41,12 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardRoute() {
   return (
     <ProtectedRoute>
-      <DashboardView />
+      <ErrorBoundary
+        fallbackTitle="Dashboard unavailable"
+        fallbackMessage="We couldn't load your dashboard right now. Public tools remain available."
+      >
+        <DashboardView />
+      </ErrorBoundary>
     </ProtectedRoute>
   );
 }
@@ -123,13 +130,16 @@ function DashboardView() {
       <div className="rounded-3xl border border-primary/20 bg-accent/30 p-6 sm:p-10 shadow-xs relative overflow-hidden">
         <div className="surface-grid pointer-events-none absolute inset-0 opacity-40" />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2 max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              Authenticated Workspace
-            </span>
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex items-center gap-3">
+              <Logo size="md" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Workspace
+              </span>
+            </div>
             <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl text-foreground">
-              Welcome to Docly, {displayName}
+              Welcome back, {displayName}
             </h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
               You are signed in as{" "}
