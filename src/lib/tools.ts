@@ -70,6 +70,9 @@ export type ToolCategoryId =
   | "ai-image"
   | "ai-tools";
 
+export type ToolAccess = "free" | "pro";
+export type UsageUnit = "files" | "pages";
+
 export interface Tool {
   id: string;
   name: string;
@@ -81,7 +84,12 @@ export interface Tool {
   formats: string[];
   multiple?: boolean;
   status: ToolStatus;
-  actionLabel?: string;
+  actionLabel?: string | undefined;
+  access?: ToolAccess | undefined;
+  usageLimit?: number | undefined;
+  usageUnit?: UsageUnit | undefined;
+  proBenefit?: string | undefined;
+  requiresAuth?: boolean | undefined;
 }
 
 export interface ToolCategory {
@@ -116,7 +124,12 @@ export const toolCategories: ToolCategory[] = [
     group: "pdf",
     blurb: "Export PDF content into editable formats.",
   },
-  { id: "edit-pdf", title: "Edit PDF", group: "pdf", blurb: "Annotate, stamp and adjust page content." },
+  {
+    id: "edit-pdf",
+    title: "Edit PDF",
+    group: "pdf",
+    blurb: "Annotate, stamp and adjust page content.",
+  },
   {
     id: "pdf-security",
     title: "PDF Security",
@@ -129,19 +142,63 @@ export const toolCategories: ToolCategory[] = [
     group: "image",
     blurb: "Move between JPG, PNG and WEBP formats.",
   },
-  { id: "image-editing", title: "Image Editing", group: "image", blurb: "Resize, crop and adjust images." },
+  {
+    id: "image-editing",
+    title: "Image Editing",
+    group: "image",
+    blurb: "Resize, crop and adjust images.",
+  },
   {
     id: "image-optimization",
     title: "Image Optimization",
     group: "image",
     blurb: "Reduce weight and strip hidden data.",
   },
-  { id: "image-to-pdf", title: "Image to PDF", group: "image", blurb: "Bundle photos into documents." },
+  {
+    id: "image-to-pdf",
+    title: "Image to PDF",
+    group: "image",
+    blurb: "Bundle photos into documents.",
+  },
   { id: "ai-image", title: "AI Image Tools", group: "image", blurb: "Assisted photo preparation." },
-  { id: "ai-tools", title: "AI Document Tools", group: "ai", blurb: "Understand and reuse document content." },
+  {
+    id: "ai-tools",
+    title: "AI Document Tools",
+    group: "ai",
+    blurb: "Understand and reuse document content.",
+  },
 ];
 
-const t = (tool: Tool): Tool => tool;
+import {
+  BENEFIT_MESSAGES,
+  CONVERSION_LIMITS,
+  OCR_LIMITS,
+  isProTool,
+} from "@/lib/monetization/config";
+
+const t = (tool: Tool): Tool => {
+  const isPro = tool.access === "pro" || isProTool(tool.id);
+  const benefit = tool.proBenefit || BENEFIT_MESSAGES[tool.id];
+  let limit = tool.usageLimit;
+  let unit = tool.usageUnit;
+
+  if (CONVERSION_LIMITS.tools.includes(tool.id as any)) {
+    limit = CONVERSION_LIMITS.dailyFreeLimitPerTool;
+    unit = "files";
+  } else if (OCR_LIMITS.tools.includes(tool.id as any)) {
+    limit = OCR_LIMITS.dailyFreePages;
+    unit = "pages";
+  }
+
+  return {
+    ...tool,
+    access: isPro ? "pro" : "free",
+    requiresAuth: tool.requiresAuth ?? isPro,
+    usageLimit: limit,
+    usageUnit: unit,
+    proBenefit: benefit,
+  };
+};
 
 export const tools: Tool[] = [
   // Organize PDF
@@ -155,7 +212,7 @@ export const tools: Tool[] = [
     route: "/tools/merge-pdf",
     formats: ["PDF"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Merge PDF",
   }),
   t({
@@ -167,7 +224,7 @@ export const tools: Tool[] = [
     icon: Split,
     route: "/tools/split-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Split PDF",
   }),
   t({
@@ -179,7 +236,7 @@ export const tools: Tool[] = [
     icon: Trash2,
     route: "/tools/remove-pages",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "extract-pages",
@@ -190,7 +247,7 @@ export const tools: Tool[] = [
     icon: FileOutput,
     route: "/tools/extract-pages",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "reorder-pdf",
@@ -201,7 +258,7 @@ export const tools: Tool[] = [
     icon: ArrowUpDown,
     route: "/tools/reorder-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "rotate-pdf",
@@ -212,7 +269,7 @@ export const tools: Tool[] = [
     icon: RotateCw,
     route: "/tools/rotate-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
 
   // Optimize PDF
@@ -225,7 +282,7 @@ export const tools: Tool[] = [
     icon: Minimize2,
     route: "/tools/compress-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Compress PDF",
   }),
   t({
@@ -237,7 +294,7 @@ export const tools: Tool[] = [
     icon: Wrench,
     route: "/tools/repair-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "ocr-pdf",
@@ -248,7 +305,22 @@ export const tools: Tool[] = [
     icon: FileScan,
     route: "/tools/ocr-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+    usageLimit: 2,
+    usageUnit: "pages",
+  }),
+  t({
+    id: "scan-to-searchable-pdf",
+    name: "Scan to Searchable PDF",
+    category: "optimize-pdf",
+    group: "pdf",
+    description: "Turn scanned documents into searchable and selectable text.",
+    icon: FileScan,
+    route: "/tools/scan-to-searchable-pdf",
+    formats: ["PDF"],
+    status: "available",
+    usageLimit: 2,
+    usageUnit: "pages",
   }),
 
   // Convert to PDF
@@ -262,7 +334,7 @@ export const tools: Tool[] = [
     route: "/tools/jpg-to-pdf",
     formats: ["JPG", "JPEG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "png-to-pdf",
@@ -274,7 +346,7 @@ export const tools: Tool[] = [
     route: "/tools/png-to-pdf",
     formats: ["PNG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "word-to-pdf",
@@ -285,7 +357,8 @@ export const tools: Tool[] = [
     icon: FileType2,
     route: "/tools/word-to-pdf",
     formats: ["DOC", "DOCX"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to PDF",
   }),
   t({
     id: "excel-to-pdf",
@@ -296,7 +369,8 @@ export const tools: Tool[] = [
     icon: FileSpreadsheet,
     route: "/tools/excel-to-pdf",
     formats: ["XLS", "XLSX"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to PDF",
   }),
   t({
     id: "powerpoint-to-pdf",
@@ -307,7 +381,8 @@ export const tools: Tool[] = [
     icon: Presentation,
     route: "/tools/powerpoint-to-pdf",
     formats: ["PPT", "PPTX"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to PDF",
   }),
 
   // Convert from PDF
@@ -320,7 +395,7 @@ export const tools: Tool[] = [
     icon: Images,
     route: "/tools/pdf-to-jpg",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "pdf-to-png",
@@ -331,40 +406,43 @@ export const tools: Tool[] = [
     icon: ImageIcon,
     route: "/tools/pdf-to-png",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "pdf-to-word",
     name: "PDF to Word",
     category: "convert-from-pdf",
     group: "pdf",
-    description: "Get an editable document from your PDF.",
+    description: "Convert PDF to editable Word document (.docx).",
     icon: FileText,
     route: "/tools/pdf-to-word",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to Word",
   }),
   t({
     id: "pdf-to-excel",
     name: "PDF to Excel",
     category: "convert-from-pdf",
     group: "pdf",
-    description: "Extract tables into workable spreadsheets.",
+    description: "Extract tables and data into workable spreadsheets (.xlsx).",
     icon: FileSpreadsheet,
     route: "/tools/pdf-to-excel",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to Excel",
   }),
   t({
     id: "pdf-to-powerpoint",
     name: "PDF to PowerPoint",
     category: "convert-from-pdf",
     group: "pdf",
-    description: "Rebuild your PDF as an editable slide deck.",
+    description: "Rebuild PDF into editable slide deck (.pptx).",
     icon: Presentation,
     route: "/tools/pdf-to-powerpoint",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Convert to PowerPoint",
   }),
 
   // Edit PDF
@@ -377,7 +455,7 @@ export const tools: Tool[] = [
     icon: Hash,
     route: "/tools/add-page-numbers",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "add-watermark",
@@ -388,7 +466,7 @@ export const tools: Tool[] = [
     icon: Stamp,
     route: "/tools/add-watermark",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "crop-pdf",
@@ -399,7 +477,7 @@ export const tools: Tool[] = [
     icon: Crop,
     route: "/tools/crop-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "edit-pdf",
@@ -419,11 +497,12 @@ export const tools: Tool[] = [
     name: "Protect PDF",
     category: "pdf-security",
     group: "pdf",
-    description: "Add a password and restrict document access.",
+    description: "Encrypt and protect your document with a secure password.",
     icon: Lock,
     route: "/tools/protect-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Protect PDF",
   }),
   t({
     id: "unlock-pdf",
@@ -434,7 +513,7 @@ export const tools: Tool[] = [
     icon: Unlock,
     route: "/tools/unlock-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "remove-pdf-metadata",
@@ -445,7 +524,7 @@ export const tools: Tool[] = [
     icon: ShieldOff,
     route: "/tools/remove-pdf-metadata",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
 
   // Image conversion
@@ -459,7 +538,7 @@ export const tools: Tool[] = [
     route: "/tools/jpg-to-png",
     formats: ["JPG", "JPEG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "png-to-jpg",
@@ -471,7 +550,7 @@ export const tools: Tool[] = [
     route: "/tools/png-to-jpg",
     formats: ["PNG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "jpg-to-webp",
@@ -483,7 +562,7 @@ export const tools: Tool[] = [
     route: "/tools/jpg-to-webp",
     formats: ["JPG", "JPEG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "png-to-webp",
@@ -495,7 +574,7 @@ export const tools: Tool[] = [
     route: "/tools/png-to-webp",
     formats: ["PNG"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "webp-to-jpg",
@@ -507,7 +586,7 @@ export const tools: Tool[] = [
     route: "/tools/webp-to-jpg",
     formats: ["WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "webp-to-png",
@@ -519,7 +598,7 @@ export const tools: Tool[] = [
     route: "/tools/webp-to-png",
     formats: ["WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
 
   // Image editing
@@ -533,7 +612,7 @@ export const tools: Tool[] = [
     route: "/tools/image-resizer",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Resize Image",
   }),
   t({
@@ -545,7 +624,7 @@ export const tools: Tool[] = [
     icon: Crop,
     route: "/tools/crop-image",
     formats: ["JPG", "PNG", "WEBP"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "rotate-image",
@@ -557,7 +636,7 @@ export const tools: Tool[] = [
     route: "/tools/rotate-image",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "flip-image",
@@ -569,7 +648,7 @@ export const tools: Tool[] = [
     route: "/tools/flip-image",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "brightness",
@@ -580,7 +659,7 @@ export const tools: Tool[] = [
     icon: Sun,
     route: "/tools/brightness",
     formats: ["JPG", "PNG", "WEBP"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "contrast",
@@ -591,7 +670,7 @@ export const tools: Tool[] = [
     icon: Contrast,
     route: "/tools/contrast",
     formats: ["JPG", "PNG", "WEBP"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "grayscale",
@@ -603,7 +682,7 @@ export const tools: Tool[] = [
     route: "/tools/grayscale",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
 
   // Image optimization
@@ -617,7 +696,7 @@ export const tools: Tool[] = [
     route: "/tools/image-compressor",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Compress Image",
   }),
   t({
@@ -630,7 +709,7 @@ export const tools: Tool[] = [
     route: "/tools/remove-image-metadata",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
 
   // Image to PDF
@@ -643,7 +722,7 @@ export const tools: Tool[] = [
     icon: FileInput,
     route: "/tools/image-to-pdf",
     formats: ["JPG", "PNG", "WEBP"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "images-to-pdf",
@@ -655,7 +734,7 @@ export const tools: Tool[] = [
     route: "/tools/images-to-pdf",
     formats: ["JPG", "PNG", "WEBP"],
     multiple: true,
-    status: "coming-soon",
+    status: "available",
   }),
 
   // AI image
@@ -664,11 +743,24 @@ export const tools: Tool[] = [
     name: "Background Remover",
     category: "ai-image",
     group: "image",
-    description: "Separate the subject from its background cleanly.",
+    description: "Separate the subject from its background cleanly with automated precision.",
     icon: Eraser,
     route: "/tools/background-remover",
     formats: ["JPG", "PNG", "WEBP"],
-    status: "coming-soon",
+    status: "available",
+    actionLabel: "Remove Background",
+  }),
+  t({
+    id: "ai-background-replacement",
+    name: "AI Background Replacement",
+    category: "ai-image",
+    group: "image",
+    description: "Replace photo backgrounds with solid colors, professional studio tones, or custom backdrops.",
+    icon: Wand2,
+    route: "/tools/ai-background-replacement",
+    formats: ["JPG", "PNG", "WEBP"],
+    status: "available",
+    actionLabel: "Replace Background",
   }),
   t({
     id: "passport-photo",
@@ -678,9 +770,9 @@ export const tools: Tool[] = [
     description:
       "Create passport-style photos while preserving the original person and natural appearance.",
     icon: IdCard,
-    route: "/tools/passport-photo",
+    route: "/tools/ai-passport-photo",
     formats: ["JPG", "PNG"],
-    status: "coming-soon",
+    status: "available",
     actionLabel: "Create Passport Photo",
   }),
 
@@ -694,7 +786,7 @@ export const tools: Tool[] = [
     icon: Brain,
     route: "/tools/ai-pdf-summary",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "chat-with-pdf",
@@ -705,7 +797,7 @@ export const tools: Tool[] = [
     icon: MessageSquareText,
     route: "/tools/chat-with-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "ocr",
@@ -716,7 +808,7 @@ export const tools: Tool[] = [
     icon: FileSearch,
     route: "/tools/ocr",
     formats: ["PDF", "JPG", "PNG"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "pdf-to-notes",
@@ -727,7 +819,7 @@ export const tools: Tool[] = [
     icon: NotebookPen,
     route: "/tools/pdf-to-notes",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "pdf-to-questions",
@@ -738,7 +830,7 @@ export const tools: Tool[] = [
     icon: FileQuestion,
     route: "/tools/pdf-to-questions",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
   }),
   t({
     id: "translate-pdf",
@@ -749,7 +841,40 @@ export const tools: Tool[] = [
     icon: Languages,
     route: "/tools/translate-pdf",
     formats: ["PDF"],
-    status: "coming-soon",
+    status: "available",
+  }),
+  t({
+    id: "resume-analyzer",
+    name: "Resume Analyzer",
+    category: "ai-tools",
+    group: "ai",
+    description: "Review, critique, and optimize resumes with ATS scoring and actionable feedback.",
+    icon: FileCheck2,
+    route: "/tools/resume-analyzer",
+    formats: ["PDF"],
+    status: "available",
+  }),
+  t({
+    id: "ai-document-assistant",
+    name: "AI Document Assistant",
+    category: "ai-tools",
+    group: "ai",
+    description: "Interactive AI co-pilot for multi-step document analysis, queries, and content drafting.",
+    icon: Bot,
+    route: "/tools/ai-document-assistant",
+    formats: ["PDF"],
+    status: "available",
+  }),
+  t({
+    id: "ai-document-generator",
+    name: "AI Document Generator",
+    category: "ai-tools",
+    group: "ai",
+    description: "Generate structured documents, reports, proposals, and briefs with intelligent outlines.",
+    icon: FilePlus2,
+    route: "/tools/ai-document-generator",
+    formats: ["PDF"],
+    status: "available",
   }),
 ];
 
@@ -766,20 +891,67 @@ export const popularToolIds = [
   "image-resizer",
 ];
 
-export const toolById = (id: string) => tools.find((tool) => tool.id === id);
+export const toolById = (id: string): Tool | undefined =>
+  tools.find(
+    (tool) =>
+      tool.id === id ||
+      tool.route === `/tools/${id}` ||
+      tool.route.replace(/^\/tools\//, "") === id ||
+      ((id === "passport-photo" || id === "ai-passport-photo") &&
+        (tool.id === "passport-photo" || tool.id === "ai-passport-photo")) ||
+      ((id === "background-remover" || id === "remove-background") &&
+        (tool.id === "background-remover" || tool.id === "remove-background")) ||
+      ((id === "ai-background-replacement" || id === "replace-background") &&
+        (tool.id === "ai-background-replacement" || tool.id === "replace-background")) ||
+      ((id === "ai-pdf-summarizer" || id === "ai-pdf-summary") &&
+        (tool.id === "ai-pdf-summarizer" || tool.id === "ai-pdf-summary")) ||
+      ((id === "ai-document-assistant" || id === "document-assistant") &&
+        (tool.id === "ai-document-assistant" || tool.id === "document-assistant")) ||
+      ((id === "ai-document-generator" || id === "document-generator") &&
+        (tool.id === "ai-document-generator" || tool.id === "document-generator")) ||
+      ((id === "pdf-translator" || id === "translate-pdf") &&
+        (tool.id === "pdf-translator" || tool.id === "translate-pdf")) ||
+      ((id === "scan-to-searchable-pdf" || id === "scan-to-pdf") &&
+        (tool.id === "scan-to-searchable-pdf" || tool.id === "ocr-pdf")),
+  );
 
-export const toolBySlug = (slug: string) => tools.find((tool) => tool.route === `/tools/${slug}`);
+export const toolBySlug = (slug: string) =>
+  tools.find((tool) => {
+    const routeSlug = tool.route.replace(/^\/tools\//, "");
+    return (
+      routeSlug === slug ||
+      tool.id === slug ||
+      ((slug === "passport-photo" || slug === "ai-passport-photo") &&
+        (tool.id === "passport-photo" || tool.id === "ai-passport-photo")) ||
+      ((slug === "background-remover" || slug === "remove-background") &&
+        (tool.id === "background-remover" || tool.id === "remove-background")) ||
+      ((slug === "ai-background-replacement" || slug === "replace-background") &&
+        (tool.id === "ai-background-replacement" || tool.id === "replace-background")) ||
+      ((slug === "ai-pdf-summarizer" || slug === "ai-pdf-summary") &&
+        (tool.id === "ai-pdf-summarizer" || tool.id === "ai-pdf-summary")) ||
+      ((slug === "ai-document-assistant" || slug === "document-assistant") &&
+        (tool.id === "ai-document-assistant" || tool.id === "document-assistant")) ||
+      ((slug === "ai-document-generator" || slug === "document-generator") &&
+        (tool.id === "ai-document-generator" || tool.id === "document-generator")) ||
+      ((slug === "pdf-translator" || slug === "translate-pdf") &&
+        (tool.id === "pdf-translator" || tool.id === "translate-pdf")) ||
+      (slug === "scan-to-searchable-pdf" &&
+        (tool.id === "scan-to-searchable-pdf" || tool.id === "ocr-pdf")) ||
+      (slug === "scan-to-pdf" && (tool.id === "scan-to-searchable-pdf" || tool.id === "ocr-pdf"))
+    );
+  });
 
 export const toolsByCategory = (id: ToolCategoryId) => tools.filter((tool) => tool.category === id);
 
-export const categoriesByGroup = (group: ToolGroup) => toolCategories.filter((c) => c.group === group);
+export const categoriesByGroup = (group: ToolGroup) =>
+  toolCategories.filter((c) => c.group === group);
 
 export const popularTools = popularToolIds
   .map((id) => toolById(id))
   .filter((tool): tool is Tool => Boolean(tool));
 
 export const aiTools = tools.filter(
-  (tool) => tool.category === "ai-tools" || tool.id === "passport-photo",
+  (tool) => tool.category === "ai-tools" || tool.category === "ai-image" || tool.group === "ai",
 );
 
 export interface MegaMenuColumn {
@@ -790,7 +962,14 @@ export interface MegaMenuColumn {
 export const megaMenuColumns: MegaMenuColumn[] = [
   {
     title: "Organize PDF",
-    toolIds: ["merge-pdf", "split-pdf", "remove-pages", "extract-pages", "reorder-pdf", "rotate-pdf"],
+    toolIds: [
+      "merge-pdf",
+      "split-pdf",
+      "remove-pages",
+      "extract-pages",
+      "reorder-pdf",
+      "rotate-pdf",
+    ],
   },
   { title: "Optimize PDF", toolIds: ["compress-pdf", "repair-pdf", "ocr-pdf"] },
   {

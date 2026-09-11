@@ -15,13 +15,14 @@ export function MegaMenuPanel({ onNavigate }: { onNavigate?: () => void }) {
                 const tool = toolById(id);
                 if (!tool) return null;
                 const Icon = tool.icon;
+                const slug = tool.route.replace(/^\/tools\//, "");
                 return (
                   <li key={id}>
                     <Link
                       to="/tools/$slug"
-                      params={{ slug: tool.route.replace("/tools/", "") }}
+                      params={{ slug }}
                       onClick={onNavigate}
-                      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-foreground/85 transition-colors hover:bg-accent hover:text-accent-foreground"
+                      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-foreground/85 transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
                     >
                       <Icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} />
                       <span className="truncate">{tool.name}</span>
@@ -37,21 +38,21 @@ export function MegaMenuPanel({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           to="/pdf-tools"
           onClick={onNavigate}
-          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary"
+          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
         >
           All PDF tools
         </Link>
         <Link
           to="/image-tools"
           onClick={onNavigate}
-          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary"
+          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
         >
           All image tools
         </Link>
         <Link
           to="/ai-tools"
           onClick={onNavigate}
-          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary"
+          className="rounded-lg border border-border px-3 py-1.5 font-medium transition-colors hover:border-primary/40 hover:text-primary cursor-pointer"
         >
           All AI tools
         </Link>

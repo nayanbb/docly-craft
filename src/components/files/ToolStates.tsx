@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export type ToolState = "idle" | "loading" | "error" | "success";
 
-export function ProgressIndicator({ value, label }: { value: number; label?: string }) {
+export function ProgressIndicator({ value, label }: { value: number; label?: string | undefined }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-2 flex items-center justify-between text-sm">
@@ -58,10 +58,10 @@ export function ProcessingButton({
   onClick,
 }: {
   label: string;
-  disabled?: boolean;
-  loading?: boolean;
-  hint?: string;
-  onClick?: () => void;
+  disabled?: boolean | undefined;
+  loading?: boolean | undefined;
+  hint?: string | undefined;
+  onClick?: (() => void) | undefined;
 }) {
   return (
     <div className="flex flex-col items-center gap-2">
@@ -82,7 +82,29 @@ export function ProcessingButton({
   );
 }
 
-export function DownloadButton({ fileName, onClick }: { fileName: string; onClick?: () => void }) {
+export function DownloadButton({
+  fileName,
+  downloadUrl,
+  onClick,
+}: {
+  fileName: string;
+  downloadUrl?: string | undefined;
+  onClick?: (() => void) | undefined;
+}) {
+  if (downloadUrl) {
+    return (
+      <a
+        href={downloadUrl}
+        download={fileName}
+        onClick={onClick}
+        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-6 py-3 text-sm font-semibold transition-colors hover:border-primary/40 hover:text-primary"
+      >
+        <Download className="h-4 w-4" />
+        Download {fileName}
+      </a>
+    );
+  }
+
   return (
     <button
       type="button"

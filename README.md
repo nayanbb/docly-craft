@@ -16,11 +16,11 @@ The reference concept is:
 
 A clean professional document toolbox where users can quickly find a tool, upload a file, process it and download the result.
 
---------------------------------------------------
+---
 
 BRAND
 
---------------------------------------------------
+---
 
 Product name:
 
@@ -36,11 +36,11 @@ Do not use a copied logo.
 
 Create an original modern SaaS color system.
 
---------------------------------------------------
+---
 
 GLOBAL HEADER
 
---------------------------------------------------
+---
 
 Create a professional sticky header.
 
@@ -72,11 +72,11 @@ The header must be responsive.
 
 On mobile, collapse navigation into a mobile menu.
 
---------------------------------------------------
+---
 
 ALL TOOLS MEGA MENU
 
---------------------------------------------------
+---
 
 Create a large professional mega menu that opens when the user clicks "All Tools".
 
@@ -180,11 +180,11 @@ Each tool should have a small consistent icon.
 
 Make the mega menu clean, readable and spacious.
 
---------------------------------------------------
+---
 
 HOME PAGE
 
---------------------------------------------------
+---
 
 Create a professional SaaS homepage.
 
@@ -212,11 +212,11 @@ Do NOT make the page look like an AI-generated template.
 
 Keep it clean and product-focused.
 
---------------------------------------------------
+---
 
 POPULAR TOOLS
 
---------------------------------------------------
+---
 
 Create a "Popular Tools" section.
 
@@ -256,11 +256,11 @@ Merge PDF
 
 "Combine multiple PDF files into one document."
 
---------------------------------------------------
+---
 
 PDF TOOLS PAGE
 
---------------------------------------------------
+---
 
 Create:
 
@@ -334,11 +334,11 @@ Remove Metadata
 
 Each tool should have a professional card.
 
---------------------------------------------------
+---
 
 IMAGE TOOLS PAGE
 
---------------------------------------------------
+---
 
 Create:
 
@@ -392,11 +392,11 @@ Background Remover
 
 AI Passport Photo
 
---------------------------------------------------
+---
 
 AI TOOLS PAGE
 
---------------------------------------------------
+---
 
 Create:
 
@@ -436,11 +436,11 @@ Do not suggest that generative AI will change a person's face.
 
 The future implementation must preserve the original subject and use segmentation/background replacement and non-generative transformations.
 
---------------------------------------------------
+---
 
 TOOL PAGE TEMPLATE
 
---------------------------------------------------
+---
 
 Create a reusable tool page component.
 
@@ -510,11 +510,11 @@ These are UI states only at this stage.
 
 Create this reusable structure so all future tools can use it.
 
---------------------------------------------------
+---
 
 FILE UPLOADER COMPONENT
 
---------------------------------------------------
+---
 
 Create reusable components:
 
@@ -536,11 +536,11 @@ The components must be reusable.
 
 Do not duplicate the same code for every tool.
 
---------------------------------------------------
+---
 
 TOOL CARD COMPONENT
 
---------------------------------------------------
+---
 
 Create a reusable ToolCard component.
 
@@ -558,11 +558,11 @@ Each card:
 
 - Accessible
 
---------------------------------------------------
+---
 
 DASHBOARD
 
---------------------------------------------------
+---
 
 Create:
 
@@ -592,11 +592,11 @@ Do not implement real user data yet.
 
 Use clearly separated mock data so it can later be replaced with backend data.
 
---------------------------------------------------
+---
 
 LOGIN
 
---------------------------------------------------
+---
 
 Create:
 
@@ -626,11 +626,11 @@ Create account
 
 Do not implement real authentication yet.
 
---------------------------------------------------
+---
 
 SIGNUP
 
---------------------------------------------------
+---
 
 Create:
 
@@ -652,11 +652,11 @@ Create Account
 
 Do not implement real authentication yet.
 
---------------------------------------------------
+---
 
 PRICING
 
---------------------------------------------------
+---
 
 Create:
 
@@ -692,11 +692,11 @@ Use placeholder pricing.
 
 Do NOT implement payment processing yet.
 
---------------------------------------------------
+---
 
 ABOUT PAGE
 
---------------------------------------------------
+---
 
 Create:
 
@@ -716,11 +716,11 @@ AI-powered document workflows
 
 Keep the copy professional and concise.
 
---------------------------------------------------
+---
 
 FOOTER
 
---------------------------------------------------
+---
 
 Create a professional footer.
 
@@ -752,11 +752,11 @@ Add:
 
 © 2026 Docly
 
---------------------------------------------------
+---
 
 DESIGN SYSTEM
 
---------------------------------------------------
+---
 
 Create a consistent design system.
 
@@ -798,11 +798,11 @@ Avoid excessive animations.
 
 Animations should be subtle and professional.
 
---------------------------------------------------
+---
 
 RESPONSIVE DESIGN
 
---------------------------------------------------
+---
 
 Desktop:
 
@@ -822,31 +822,31 @@ Mega menu becomes a mobile-friendly expandable menu.
 
 Upload areas must work visually on mobile.
 
---------------------------------------------------
+---
 
 ROUTING
 
---------------------------------------------------
+---
 
 Create working routes for:
 
 /
 
- /pdf-tools
+/pdf-tools
 
- /image-tools
+/image-tools
 
- /ai-tools
+/ai-tools
 
- /pricing
+/pricing
 
- /about
+/about
 
- /dashboard
+/dashboard
 
- /login
+/login
 
- /signup
+/signup
 
 Create routes for the main tools.
 
@@ -874,11 +874,11 @@ Examples:
 
 All tool pages should use the reusable tool page architecture.
 
---------------------------------------------------
+---
 
 IMPORTANT ARCHITECTURE
 
---------------------------------------------------
+---
 
 Use reusable components.
 
@@ -918,11 +918,11 @@ status
 
 This will make the application scalable.
 
---------------------------------------------------
+---
 
 VERY IMPORTANT: PROCESSING
 
---------------------------------------------------
+---
 
 DO NOT implement real PDF processing yet.
 
@@ -940,11 +940,11 @@ DO NOT create unnecessary backend infrastructure.
 
 This stage is ONLY for building the professional product frontend and scalable UI architecture.
 
---------------------------------------------------
+---
 
 QUALITY
 
---------------------------------------------------
+---
 
 Before finishing:
 
@@ -978,11 +978,11 @@ Make sure the interface looks like a real commercial SaaS product.
 
 Do not make the product look like a college project.
 
---------------------------------------------------
+---
 
 FINAL REQUIREMENT
 
---------------------------------------------------
+---
 
 Build the complete Stage 1 frontend now.
 
@@ -1012,3 +1012,37 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+### Office Conversion Backend (Gotenberg)
+
+Docly provides high-fidelity conversion of Word (`.docx`, `.doc`), Excel (`.xlsx`, `.xls`), and PowerPoint (`.pptx`, `.ppt`) documents to PDF using **Gotenberg** (containerized LibreOffice).
+
+#### 1. Start Gotenberg with Docker
+
+Run the official Gotenberg container locally:
+
+```sh
+docker run --rm -p "3000:3000" gotenberg/gotenberg:8
+```
+
+#### 2. Configure Environment Variable
+
+In your local project root, create or update `.env`:
+
+```sh
+GOTENBERG_URL=http://localhost:3000
+```
+
+> **Security Note:** `GOTENBERG_URL` is strictly a server-side environment variable. It is never exposed in client bundles or public endpoints.
+
+#### 3. Conversion Capabilities
+
+- **Supported by Gotenberg (Office → PDF):**
+  - Word to PDF (`/tools/word-to-pdf`)
+  - Excel to PDF (`/tools/excel-to-pdf`)
+  - PowerPoint to PDF (`/tools/powerpoint-to-pdf`)
+- **Reverse Conversions (PDF → Office):**
+  - PDF to Word (`/tools/pdf-to-word`)
+  - PDF to Excel (`/tools/pdf-to-excel`)
+  - PDF to PowerPoint (`/tools/pdf-to-powerpoint`)
+  - _Note:_ Gotenberg LibreOffice conversion engine converts Office documents to PDF, not PDF back to Office. Reverse conversions require a dedicated OCR / layout extraction provider (such as CloudConvert via `CLOUDCONVERT_API_KEY`).

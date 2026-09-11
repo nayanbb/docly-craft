@@ -8,9 +8,7 @@ export function FilePreview({ files }: { files: SelectedFile[] }) {
       {files.length === 0 ? (
         <div className="mt-3 grid place-items-center rounded-lg border border-dashed border-input bg-surface py-10 text-center">
           <FileSearch className="h-6 w-6 text-muted-foreground" />
-          <p className="mt-2 text-sm text-muted-foreground">
-            File previews will appear here once processing is available.
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">Add files above to see a preview.</p>
         </div>
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -20,13 +18,19 @@ export function FilePreview({ files }: { files: SelectedFile[] }) {
               className="flex aspect-[3/4] flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-border bg-surface p-2 text-center"
             >
               {file.previewUrl ? (
-                <img src={file.previewUrl} alt={file.name} className="h-full w-full object-contain" />
+                <img
+                  src={file.previewUrl}
+                  alt={file.name}
+                  className="h-full w-full object-contain"
+                />
               ) : (
                 <>
                   <span className="text-xs font-semibold uppercase text-primary">
                     {file.name.split(".").pop()}
                   </span>
-                  <span className="line-clamp-2 text-[0.7rem] text-muted-foreground">{file.name}</span>
+                  <span className="line-clamp-2 text-[0.7rem] text-muted-foreground">
+                    {file.name}
+                  </span>
                 </>
               )}
             </div>

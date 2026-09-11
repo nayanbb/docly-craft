@@ -37,8 +37,8 @@ function Home() {
               Everything you need to work with PDFs, images and documents.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Simple, fast and intelligent tools for converting, editing, organizing and processing your
-              files.
+              Simple, fast and intelligent tools for converting, editing, organizing and processing
+              your files.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -74,7 +74,9 @@ function Home() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Popular tools</h2>
-            <p className="mt-2 text-muted-foreground">The operations our users reach for every day.</p>
+            <p className="mt-2 text-muted-foreground">
+              The operations our users reach for every day.
+            </p>
           </div>
           <Link
             to="/pdf-tools"
@@ -109,7 +111,10 @@ function Home() {
               copy: "Summaries, notes and passport photos that respect the original content.",
             },
           ].map((item) => (
-            <div key={item.title} className="rounded-2xl border border-border bg-card p-6 shadow-card">
+            <div
+              key={item.title}
+              className="rounded-2xl border border-border bg-card p-6 shadow-card"
+            >
               <span className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-surface text-primary">
                 <item.icon className="h-5 w-5" strokeWidth={1.9} />
               </span>
@@ -126,7 +131,8 @@ function Home() {
             One workspace for every document task
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed opacity-80 sm:text-base">
-            Start free and upgrade when you need larger files, batch processing and more AI operations.
+            Start free and upgrade when you need larger files, batch processing and more AI
+            operations.
           </p>
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
             <Link

@@ -36,7 +36,8 @@ export function Footer() {
         <div className="max-w-xs">
           <Logo />
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            Everything you need to work with PDFs, images and documents — in one calm, fast workspace.
+            Everything you need to work with PDFs, images and documents — in one calm, fast
+            workspace.
           </p>
           <div className="mt-5 flex gap-2">
             {[Twitter, Linkedin, Github].map((Icon, i) => (

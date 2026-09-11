@@ -16,7 +16,8 @@ export const Route = createFileRoute("/ai-tools")({
       { property: "og:title", content: "AI Document Tools | Docly" },
       {
         property: "og:description",
-        content: "Assisted document workflows: summaries, notes, translation, OCR and passport photos.",
+        content:
+          "Assisted document workflows: summaries, notes, translation, OCR and passport photos.",
       },
     ],
   }),
@@ -52,8 +53,8 @@ function AiTools() {
                 </p>
                 <p className="mt-4 flex max-w-lg items-start gap-2 text-sm text-muted-foreground">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  Docly uses segmentation, background replacement and standards-based cropping. Faces are
-                  never redrawn or generated.
+                  Docly uses segmentation, background replacement and standards-based cropping.
+                  Faces are never redrawn or generated.
                 </p>
                 <Link
                   to="/tools/$slug"

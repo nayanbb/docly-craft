@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  docly-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: docly-converter
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - CONVERTER_SECRET=${CONVERTER_SECRET:-docly_converter_dev_secret}
+      - MAX_CONCURRENT_CONVERSIONS=5
+      - CONVERSION_TIMEOUT_SECONDS=60
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: docly-converter-tunnel
+    command: tunnel --no-autoupdate --url http://docly-converter:8001
+    depends_on:
+      - docly-converter
+    restart: unless-stopped

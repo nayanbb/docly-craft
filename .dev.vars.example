@@ -1,0 +1,32 @@
+# Docly Cloudflare Worker Local Environment Template
+# Copy to .dev.vars for local development with Wrangler / Cloudflare Workers runtime
+# Never commit .dev.vars containing real secrets to git.
+
+# -----------------------------------------------------------------------------
+# Docly Self-Hosted Document Conversion Microservice (Primary)
+# -----------------------------------------------------------------------------
+# Set to local converter during dev (cd services/converter && python -m uvicorn src.server:app --port 8001)
+DOCLY_CONVERTER_URL=http://localhost:8001
+# DOCLY_CONVERTER_SECRET=docly_converter_dev_secret
+
+# -----------------------------------------------------------------------------
+# PDF -> Office Conversions (Optional Legacy CloudConvert Fallback)
+# -----------------------------------------------------------------------------
+# CLOUDCONVERT_API_KEY=your_cloudconvert_api_key_here
+# CLOUDCONVERT_FALLBACK=false
+
+# -----------------------------------------------------------------------------
+# Office -> PDF Conversions (Word to PDF, Excel to PDF, PowerPoint to PDF)
+# -----------------------------------------------------------------------------
+# GOTENBERG_URL=http://localhost:3000
+
+# -----------------------------------------------------------------------------
+# Razorpay Subscriptions (Docly Pro ₹25/month)
+# -----------------------------------------------------------------------------
+# RAZORPAY_KEY_ID=rzp_test_your_key_id_here
+# RAZORPAY_KEY_SECRET=your_razorpay_key_secret_here
+# RAZORPAY_PRO_PLAN_ID=plan_your_plan_id_here
+# RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret_here
+# SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+# ADMIN_EMAILS=admin@docly.com
+

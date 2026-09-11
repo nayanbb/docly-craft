@@ -8,7 +8,8 @@ export const Route = createFileRoute("/contact")({
       { title: "Contact Docly — Support and partnerships" },
       {
         name: "description",
-        content: "Get in touch with the Docly team about support, feedback, billing or partnerships.",
+        content:
+          "Get in touch with the Docly team about support, feedback, billing or partnerships.",
       },
       { property: "og:title", content: "Contact Docly" },
       { property: "og:description", content: "Support, feedback and partnership enquiries." },
@@ -55,14 +56,21 @@ function Contact() {
         </form>
         <div className="space-y-4">
           {[
-            { icon: Mail, title: "Email", copy: "support@docly.app — replies within one business day." },
+            {
+              icon: Mail,
+              title: "Email",
+              copy: "support@docly.app — replies within one business day.",
+            },
             {
               icon: MessageSquare,
               title: "Product feedback",
               copy: "Tell us which tool you need next and we'll prioritise it.",
             },
           ].map((item) => (
-            <div key={item.title} className="rounded-2xl border border-border bg-card p-5 shadow-card">
+            <div
+              key={item.title}
+              className="rounded-2xl border border-border bg-card p-5 shadow-card"
+            >
               <item.icon className="h-5 w-5 text-primary" />
               <h2 className="mt-3 text-sm font-semibold">{item.title}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{item.copy}</p>

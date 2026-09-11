@@ -5,7 +5,8 @@ export interface SelectedFile {
   id: string;
   name: string;
   size: number;
-  previewUrl?: string;
+  file: File;
+  previewUrl?: string | undefined;
 }
 
 export function FileList({
@@ -25,7 +26,10 @@ export function FileList({
       </div>
       <ul className="divide-y divide-border">
         {files.map((file) => (
-          <li key={file.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+          <li
+            key={file.id}
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
+          >
             <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-surface text-primary">
               {file.previewUrl ? (
                 <img src={file.previewUrl} alt="" className="h-full w-full object-cover" />

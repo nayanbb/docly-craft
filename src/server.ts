@@ -1,5 +1,19 @@
 import "./lib/error-capture";
 
+// Safely load server environment variables (.env and .dev.vars) on Node server runtime
+if (typeof process !== "undefined" && typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile(".env");
+  } catch {
+    // Optional .env file
+  }
+  try {
+    process.loadEnvFile(".dev.vars");
+  } catch {
+    // Optional .dev.vars file
+  }
+}
+
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -44,9 +58,104 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+import {
+  handleConversionApiRequest,
+  handleConversionStatusRequest,
+} from "./lib/office/server-handler";
+import { handlePdfUnlockRequest } from "./lib/pdf/server-unlock";
+import {
+  handleAiChatRequest,
+  handleAiStatusRequest,
+  handleAiDetectFramingRequest,
+  handleAiSummarizeRequest,
+  handleAiNotesRequest,
+  handleAiQuestionsRequest,
+  handleAiTranslateRequest,
+  handleAiResumeRequest,
+  handleAiGenerateRequest,
+  handleAiAssistantRequest,
+} from "./lib/ai/server/handler";
+import {
+  handleRazorpaySubscriptionRequest,
+  handleRazorpayCancelRequest,
+  handleRazorpayWebhookRequest,
+  handleRazorpayStatusRequest,
+} from "./lib/razorpay/server";
+import {
+  handleAdminMetricsRequest,
+  handleAdminPaymentsRequest,
+  handleAdminSubscriptionsRequest,
+} from "./lib/admin/server-handler";
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/api/pdf/unlock") {
+        return await handlePdfUnlockRequest(request, env);
+      }
+      if (url.pathname === "/api/convert/status") {
+        return await handleConversionStatusRequest(request, env);
+      }
+      if (url.pathname === "/api/convert") {
+        return await handleConversionApiRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/status") {
+        return await handleAiStatusRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/chat") {
+        return await handleAiChatRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/detect-framing") {
+        return await handleAiDetectFramingRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/summarize") {
+        return await handleAiSummarizeRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/notes") {
+        return await handleAiNotesRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/questions") {
+        return await handleAiQuestionsRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/translate") {
+        return await handleAiTranslateRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/resume") {
+        return await handleAiResumeRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/generate") {
+        return await handleAiGenerateRequest(request, env);
+      }
+      if (url.pathname === "/api/ai/assistant") {
+        return await handleAiAssistantRequest(request, env);
+      }
+
+      // Razorpay Payments & Subscription Endpoints
+      if (url.pathname === "/api/razorpay/subscription") {
+        return await handleRazorpaySubscriptionRequest(request, env);
+      }
+      if (url.pathname === "/api/razorpay/cancel") {
+        return await handleRazorpayCancelRequest(request, env);
+      }
+      if (url.pathname === "/api/razorpay/webhook") {
+        return await handleRazorpayWebhookRequest(request, env);
+      }
+      if (url.pathname === "/api/razorpay/status") {
+        return await handleRazorpayStatusRequest(request, env);
+      }
+
+      // Admin Management & Revenue Endpoints
+      if (url.pathname === "/api/admin/metrics") {
+        return await handleAdminMetricsRequest(request, env);
+      }
+      if (url.pathname === "/api/admin/payments") {
+        return await handleAdminPaymentsRequest(request, env);
+      }
+      if (url.pathname === "/api/admin/subscriptions") {
+        return await handleAdminSubscriptionsRequest(request, env);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
