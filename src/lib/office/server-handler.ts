@@ -402,14 +402,17 @@ export async function handleConversionApiRequest(
       );
     }
 
-    const message = err instanceof Error ? err.message : "Conversion service error.";
+    console.error("Office conversion error:", err instanceof Error ? err.name : "Error");
+    const safeMessage = "Conversion is temporarily unavailable. Please try again shortly.";
     return new Response(
       JSON.stringify({
-        error: message,
+        ok: false,
+        error: safeMessage,
         code: "CONVERSION_FAILED",
+        message: safeMessage,
       }),
       {
-        status: 500,
+        status: 502,
         headers: { "Content-Type": "application/json" },
       },
     );

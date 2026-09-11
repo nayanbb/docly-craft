@@ -1,4 +1,3 @@
-import { createWorker } from "tesseract.js";
 import { convertPdfToImages } from "@/lib/pdf/pdf-to-images";
 
 export interface OcrResult {
@@ -17,6 +16,7 @@ export async function recognizeImageText(
   onProgress?: (percent: number, status?: string) => void,
 ): Promise<OcrResult> {
   onProgress?.(10, "Initializing OCR engine...");
+  const { createWorker } = await import("tesseract.js");
   const worker = await createWorker(language);
 
   onProgress?.(30, "Analyzing image text...");
@@ -48,6 +48,7 @@ export async function recognizePdfText(
     onProgress?.(10 + Math.round((cur / tot) * 20), `Rendering page ${cur} of ${tot}...`);
   });
 
+  const { createWorker } = await import("tesseract.js");
   const worker = await createWorker(language);
   const totalPages = pageImages.length;
   const pageResults: Array<{ pageNumber: number; text: string }> = [];

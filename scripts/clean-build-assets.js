@@ -1,24 +1,28 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// 1. Prune oversized WASM assets (>5MB Cloudflare limit)
-const assetsDir = path.resolve(".output", "public", "assets");
-if (fs.existsSync(assetsDir)) {
-  const files = fs.readdirSync(assetsDir);
-  for (const file of files) {
-    const filePath = path.join(assetsDir, file);
-    const stat = fs.statSync(filePath);
-    // Cloudflare free/preview limit is 5MB (5,242,880 bytes).
-    // Remove unused bundled wasm files exceeding limit (loaded dynamically from CDN).
-    if (stat.size > 5242880 && file.endsWith(".wasm")) {
-      console.log(`[clean-build-assets] Removing oversized wasm asset (>5MB): ${file} (${stat.size} bytes)`);
-      fs.unlinkSync(filePath);
+// 1. Prune oversized WASM assets (>5MB limit) in both Cloudflare and Vercel output directories
+const assetDirs = [
+  path.resolve(".output", "public", "assets"),
+  path.resolve(".vercel", "output", "static", "assets"),
+];
+
+for (const dir of assetDirs) {
+  if (fs.existsSync(dir)) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.size > 5242880 && file.endsWith(".wasm")) {
+        console.log(`[clean-build-assets] Removing oversized wasm asset (>5MB): ${file} (${stat.size} bytes) from ${dir}`);
+        fs.unlinkSync(filePath);
+      }
     }
   }
 }
 console.log("[clean-build-assets] Asset pruning completed.");
 
-// 2. Sync server environment variables into Cloudflare Worker wrangler.json
+// 2. Sync server environment variables into Cloudflare Worker wrangler.json (if present)
 const wranglerJsonPath = path.resolve(".output", "server", "wrangler.json");
 if (fs.existsSync(wranglerJsonPath)) {
   try {

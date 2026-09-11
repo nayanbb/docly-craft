@@ -95,6 +95,21 @@ def _resolve_operation(
     return None
 
 
+@app.get("/")
+async def root_index():
+    """
+    Docly Converter Microservice Root Index.
+    """
+    return {
+        "service": "Docly Document Conversion Engine",
+        "status": "ready",
+        "version": "1.0.0",
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "notice": "This endpoint is the isolated Docly Office Conversion Microservice. The Docly web application frontend is served by the main TanStack Start deployment.",
+    }
+
+
 @app.get("/health")
 async def health_check():
     """
