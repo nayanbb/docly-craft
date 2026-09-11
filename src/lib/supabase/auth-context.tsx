@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
-import { supabase, isSupabaseConfigured, formatAuthError } from "@/lib/supabase/client";
+import { supabase, isSupabaseConfigured, formatAuthError, AUTH_STORAGE_KEY } from "@/lib/supabase/client";
 import type { AuthContextType, UserProfile } from "@/lib/supabase/types";
 import { sanitizeRedirectPath } from "@/lib/auth/require-auth";
 
@@ -111,24 +111,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let isMounted = true;
+    let initialResolved = false;
 
-    // 1. Check active session on mount
+    // 1. Authoritatively recover persisted session from storage
     supabase.auth
       .getSession()
-      .then(async ({ data: { session: initialSession } }) => {
+      .then(async ({ data: { session: initialSession }, error }) => {
         if (!isMounted) return;
+        if (error) {
+          console.warn("Session recovery returned error:", error.message);
+        }
+
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
+
         if (initialSession?.user) {
           const p = await fetchProfile(initialSession.user);
           if (isMounted) setProfile(p);
+        } else {
+          if (isMounted) setProfile(null);
         }
       })
       .catch((err) => {
         console.warn("Initial session recovery failed:", err);
       })
       .finally(() => {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) {
+          initialResolved = true;
+          setIsLoading(false);
+        }
       });
 
     // 2. Subscribe to auth state changes
@@ -153,12 +164,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
       }
 
-      setIsLoading(false);
+      // Avoid premature loading state clear if getSession has not resolved
+      if (initialResolved || newSession) {
+        setIsLoading(false);
+      }
     });
+
+    // 3. Multi-Tab Session Synchronization
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === AUTH_STORAGE_KEY || (e.key && e.key.includes("auth-token"))) {
+        supabase.auth.getSession().then(({ data: { session: updatedSession } }) => {
+          if (!isMounted) return;
+          setSession(updatedSession);
+          setUser(updatedSession?.user ?? null);
+          if (updatedSession?.user) {
+            fetchProfile(updatedSession.user).then((p) => {
+              if (isMounted) setProfile(p);
+            });
+          } else {
+            setProfile(null);
+          }
+        });
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorage);
+    }
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", handleStorage);
+      }
     };
   }, []);
 

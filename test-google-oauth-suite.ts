@@ -71,15 +71,15 @@ async function main() {
     );
   });
 
-  // 3. formatAuthError preserves normal email/password auth error messages
+  // 3. formatAuthError preserves email/password validation and login messages
   await runTest("3. formatAuthError preserves email/password validation and login messages", () => {
     assert.strictEqual(
       formatAuthError("Invalid login credentials"),
-      "Incorrect email or password. Please double check and try again.",
+      "Incorrect email or password.",
     );
     assert.strictEqual(
       formatAuthError("User already registered"),
-      "An account with this email already exists. Please log in instead.",
+      "An account with this email already exists. Try logging in instead.",
     );
     assert.strictEqual(
       formatAuthError("Password should be at least 6 characters"),

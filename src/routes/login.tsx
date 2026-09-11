@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Eye, EyeOff, Lock, Mail, ArrowRight, AlertCircle, Sparkles, KeyRound } from "lucide-react";
 import { useAuth } from "@/lib/supabase/auth-context";
@@ -49,6 +49,7 @@ function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
 
   // If already authenticated, redirect safely to target
   useEffect(() => {
@@ -83,6 +84,10 @@ function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading || isGoogleLoading) {
+      return;
+    }
+
     const cleanEmail = email.trim();
     if (!cleanEmail) {
       setError("Please enter your email address.");
@@ -97,19 +102,24 @@ function LoginPage() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
     setError(null);
 
-    const { error: signInError } = await signIn(cleanEmail, password);
+    try {
+      const { error: signInError } = await signIn(cleanEmail, password);
 
-    if (signInError) {
-      setError(signInError.message);
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+
+      toast.success("Welcome back to Docly!");
+      navigate({ to: redirectTarget });
+    } finally {
+      isSubmittingRef.current = false;
       setIsLoading(false);
-      return;
     }
-
-    toast.success("Welcome back to Docly!");
-    navigate({ to: redirectTarget });
   };
 
   const handleGoogleSignIn = async () => {

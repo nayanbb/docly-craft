@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Eye,
@@ -63,6 +63,7 @@ function SignupPage() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationNeeded, setConfirmationNeeded] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // If already authenticated, redirect safely to target
   useEffect(() => {
@@ -97,6 +98,10 @@ function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading || isGoogleLoading) {
+      return;
+    }
+
     const cleanEmail = email.trim();
     if (!cleanEmail) {
       setError("Please enter your email address.");
@@ -119,29 +124,33 @@ function SignupPage() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
     setError(null);
 
-    const { error: signUpError, needsConfirmation } = await signUp(
-      cleanEmail,
-      password,
-      displayName.trim() || undefined,
-    );
+    try {
+      const { error: signUpError, needsConfirmation } = await signUp(
+        cleanEmail,
+        password,
+        displayName.trim() || undefined,
+      );
 
-    if (signUpError) {
-      setError(signUpError.message);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      if (needsConfirmation) {
+        setConfirmationNeeded(true);
+        return;
+      }
+
+      toast.success("Account created successfully! Welcome to Docly.");
+      navigate({ to: redirectTarget });
+    } finally {
+      isSubmittingRef.current = false;
       setIsLoading(false);
-      return;
     }
-
-    if (needsConfirmation) {
-      setConfirmationNeeded(true);
-      setIsLoading(false);
-      return;
-    }
-
-    toast.success("Account created successfully! Welcome to Docly.");
-    navigate({ to: redirectTarget });
   };
 
   const handleGoogleSignIn = async () => {

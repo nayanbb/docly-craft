@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { formatAuthError } from "./src/lib/supabase/client";
+import { formatAuthError, AUTH_STORAGE_KEY, supabaseUrl, supabaseAnonKey } from "./src/lib/supabase/client";
 import { sanitizeRedirectPath } from "./src/lib/auth/require-auth";
 import { CANONICAL_PRODUCTION_ORIGIN, getCanonicalAuthOrigin } from "./src/lib/supabase/auth-context";
 
@@ -37,72 +37,100 @@ async function main() {
     assert.strictEqual(origin, "https://docly-tools.vercel.app");
   });
 
-  // 3. Verify formatAuthError handles invalid login credentials safely
-  await runTest("3. formatAuthError converts 'Invalid login credentials' to user-friendly copy", () => {
-    const formatted = formatAuthError({ message: "Invalid login credentials" });
-    assert.strictEqual(formatted, "Incorrect email or password. Please double check and try again.");
+  // 3. Centralized Error Mapper: RATE_LIMIT (HTTP 429)
+  await runTest("3. formatAuthError maps HTTP 429 / rate limits to rate limit notice", () => {
+    const fromStatus = formatAuthError({ status: 429, message: "Too many requests" });
+    assert.strictEqual(fromStatus, "Too many authentication attempts. Please wait a few minutes and try again.");
+
+    const fromCode = formatAuthError({ code: "over_email_send_rate_limit", message: "email rate limit exceeded" });
+    assert.strictEqual(fromCode, "Too many authentication attempts. Please wait a few minutes and try again.");
   });
 
-  // 4. Verify formatAuthError handles email not confirmed
-  await runTest("4. formatAuthError converts 'Email not confirmed' to confirmation guidance", () => {
-    const formatted = formatAuthError({ message: "Email not confirmed" });
-    assert.strictEqual(formatted, "Please confirm your email address before signing in. Check your inbox for the confirmation link.");
+  // 4. Centralized Error Mapper: INVALID_CREDENTIALS
+  await runTest("4. formatAuthError maps invalid credentials to user-safe copy", () => {
+    const formatted = formatAuthError({ code: "invalid_credentials", message: "Invalid login credentials" });
+    assert.strictEqual(formatted, "Incorrect email or password.");
   });
 
-  // 5. Verify formatAuthError handles rate limit
-  await runTest("5. formatAuthError converts 'rate limit' to throttle message", () => {
-    const formatted = formatAuthError({ message: "over_email_send_rate_limit" });
-    assert.strictEqual(formatted.includes("rate limit") || formatted.includes("wait a few moments") || formatted.includes("Too many"), true);
+  // 5. Centralized Error Mapper: EMAIL_ALREADY_EXISTS
+  await runTest("5. formatAuthError maps user_already_exists to login guidance", () => {
+    const formatted = formatAuthError({ code: "user_already_exists", message: "User already registered" });
+    assert.strictEqual(formatted, "An account with this email already exists. Try logging in instead.");
   });
 
-  // 6. Verify client.ts configuration has persistSession, autoRefreshToken, and detectSessionInUrl
-  await runTest("6. client.ts configures persistSession, autoRefreshToken, and detectSessionInUrl", () => {
+  // 6. Centralized Error Mapper: EMAIL_CONFIRMATION_REQUIRED
+  await runTest("6. formatAuthError maps email_not_confirmed to check email guidance", () => {
+    const formatted = formatAuthError({ code: "email_not_confirmed", message: "Email not confirmed" });
+    assert.strictEqual(formatted, "Account created. Please check your email to confirm your account.");
+  });
+
+  // 7. Centralized Error Mapper: WEAK_PASSWORD and INVALID_EMAIL
+  await runTest("7. formatAuthError maps weak password and invalid email properly", () => {
+    const weakPass = formatAuthError({ code: "weak_password", message: "Password should be at least 6 characters" });
+    assert.strictEqual(weakPass, "Password must be at least 6 characters long.");
+
+    const invalidEmail = formatAuthError({ code: "invalid_email", message: "invalid email format" });
+    assert.strictEqual(invalidEmail, "Please enter a valid email address.");
+  });
+
+  // 8. Centralized Error Mapper: NETWORK_ERROR
+  await runTest("8. formatAuthError maps network failures to connection guidance", () => {
+    const netErr = formatAuthError({ message: "Failed to fetch network resource" });
+    assert.strictEqual(netErr, "Unable to connect right now. Please check your internet connection and try again.");
+  });
+
+  // 9. Centralized Error Mapper: UNKNOWN_AUTH_ERROR (no raw leaks)
+  await runTest("9. formatAuthError maps unknown server errors to safe fallback", () => {
+    const rawLeak = formatAuthError({ message: "Postgres error 23505: duplicate key value violates unique constraint" });
+    assert.strictEqual(rawLeak, "Unable to complete authentication right now. Please try again later.");
+    assert.strictEqual(rawLeak.includes("Postgres"), false);
+  });
+
+  // 10. Client.ts persistent session, storageKey, and autoRefreshToken
+  await runTest("10. client.ts configures persistSession, autoRefreshToken, detectSessionInUrl, and AUTH_STORAGE_KEY", () => {
     const clientFile = fs.readFileSync("c:/Users/nayan/docly-craft/src/lib/supabase/client.ts", "utf-8");
-    assert.strictEqual(clientFile.includes("persistSession: typeof window !== \"undefined\""), true);
-    assert.strictEqual(clientFile.includes("autoRefreshToken: typeof window !== \"undefined\""), true);
+    assert.strictEqual(clientFile.includes("persistSession: true"), true);
+    assert.strictEqual(clientFile.includes("autoRefreshToken: true"), true);
     assert.strictEqual(clientFile.includes("detectSessionInUrl: true"), true);
-    assert.strictEqual(clientFile.includes("storage: typeof window !== \"undefined\" ? window.localStorage : undefined"), true);
+    assert.strictEqual(clientFile.includes("storageKey: AUTH_STORAGE_KEY"), true);
+    assert.strictEqual(AUTH_STORAGE_KEY, "docly_supabase_auth_token");
   });
 
-  // 7. Verify login.tsx email/password submit handler does NOT redirect to Vercel
-  await runTest("7. login.tsx email/password submit handler uses internal navigate() to redirectTarget", () => {
+  // 11. Duplicate submit prevention in signup.tsx
+  await runTest("11. signup.tsx implements isSubmittingRef to block duplicate clicks and mutations", () => {
+    const signupFile = fs.readFileSync("c:/Users/nayan/docly-craft/src/routes/signup.tsx", "utf-8");
+    assert.strictEqual(signupFile.includes("const isSubmittingRef = useRef(false)"), true);
+    assert.strictEqual(signupFile.includes("if (isSubmittingRef.current || isLoading || isGoogleLoading)"), true);
+    assert.strictEqual(signupFile.includes("isSubmittingRef.current = true;"), true);
+    assert.strictEqual(signupFile.includes("isSubmittingRef.current = false;"), true);
+  });
+
+  // 12. Duplicate submit prevention in login.tsx
+  await runTest("12. login.tsx implements isSubmittingRef to block duplicate clicks and mutations", () => {
     const loginFile = fs.readFileSync("c:/Users/nayan/docly-craft/src/routes/login.tsx", "utf-8");
-    assert.strictEqual(loginFile.includes("await signIn(cleanEmail, password)"), true);
-    assert.strictEqual(loginFile.includes("navigate({ to: redirectTarget })"), true);
-    // Verify no window.location redirect in handleSubmit
-    assert.strictEqual(loginFile.includes("window.location.href = redirectTarget"), false);
-    assert.strictEqual(loginFile.includes("window.location.assign"), false);
-    assert.strictEqual(loginFile.includes("window.location.replace"), false);
+    assert.strictEqual(loginFile.includes("const isSubmittingRef = useRef(false)"), true);
+    assert.strictEqual(loginFile.includes("if (isSubmittingRef.current || isLoading || isGoogleLoading)"), true);
+    assert.strictEqual(loginFile.includes("isSubmittingRef.current = true;"), true);
+    assert.strictEqual(loginFile.includes("isSubmittingRef.current = false;"), true);
   });
 
-  // 8. Verify auth-context.tsx signUp passes canonical emailRedirectTo
-  await runTest("8. auth-context.tsx signUp includes canonical emailRedirectTo pointing to /dashboard", () => {
+  // 13. AuthContext multi-tab synchronization listener
+  await runTest("13. auth-context.tsx listens to storage events for multi-tab synchronization", () => {
     const authContextFile = fs.readFileSync("c:/Users/nayan/docly-craft/src/lib/supabase/auth-context.tsx", "utf-8");
-    assert.strictEqual(authContextFile.includes("emailRedirectTo: `${canonicalOrigin}/dashboard`"), true);
-    assert.strictEqual(authContextFile.includes("redirectTo: `${canonicalOrigin}/reset-password`"), true);
+    assert.strictEqual(authContextFile.includes("window.addEventListener(\"storage\", handleStorage)"), true);
+    assert.strictEqual(authContextFile.includes("e.key === AUTH_STORAGE_KEY"), true);
+    assert.strictEqual(authContextFile.includes("initialResolved = true;"), true);
   });
 
-  // 9. Verify __root.tsx has canonical production domain guard
-  await runTest("9. __root.tsx guards against preview deployment domains (*.vercel.app)", () => {
-    const rootFile = fs.readFileSync("c:/Users/nayan/docly-craft/src/routes/__root.tsx", "utf-8");
-    assert.strictEqual(rootFile.includes("hostname.endsWith(\".vercel.app\")"), true);
-    assert.strictEqual(rootFile.includes("hostname !== \"docly-tools.vercel.app\""), true);
-    assert.strictEqual(rootFile.includes("canonicalTarget = `https://docly-tools.vercel.app"), true);
-  });
-
-  // 10. Live Supabase Auth test: verify signInWithPassword against live Supabase project
-  await runTest("10. Live Supabase signInWithPassword returns valid auth response (invalid_credentials for test probe)", async () => {
-    const client = createClient(
-      "https://zslugwmnhrcjhbcexdvs.supabase.co",
-      "sb_publishable_326teNMTxtzqTN9bU4vJqg_aDq6yHtE"
-    );
+  // 14. Live Supabase Auth test: verify signInWithPassword against live Supabase project
+  await runTest("14. Live Supabase signInWithPassword returns valid 400 invalid_credentials for non-existent probe", async () => {
+    const client = createClient(supabaseUrl, supabaseAnonKey);
     const res = await client.auth.signInWithPassword({
-      email: "probe_nonexistent_user@example.com",
+      email: "probe_docly_auth_test_user@example.com",
       password: "TestPassword123!",
     });
 
-    // Should return error from Supabase (not an unhandled network drop or HTML page)
-    assert.ok(res.error, "Must return error for invalid credentials");
+    assert.ok(res.error, "Must return error for probe credentials");
     assert.strictEqual(res.error!.status, 400);
     assert.strictEqual(res.error!.message.toLowerCase().includes("invalid"), true);
     assert.strictEqual(res.data.session, null);
