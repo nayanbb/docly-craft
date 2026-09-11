@@ -37,3 +37,8 @@ dist-ssr
 scratch/
 scratch-test-outputs/
 test-fixtures/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

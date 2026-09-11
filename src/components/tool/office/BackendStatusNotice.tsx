@@ -29,16 +29,14 @@ export function BackendStatusNotice({ status, toolName, operation }: BackendStat
               <span className="capitalize font-bold text-emerald-600 dark:text-emerald-400">
                 {status?.provider === "self-hosted"
                   ? "Docly Self-Hosted Engine"
-                  : status?.provider === "cloudconvert"
-                    ? "CloudConvert API Engine"
-                    : status?.provider || "Document Conversion Engine"}
+                  : status?.provider === "local-office"
+                    ? "Microsoft Office Desktop Engine"
+                    : "Docly Conversion Engine"}
               </span>
             </span>
           </div>
           <span className="text-[0.7rem] text-muted-foreground hidden sm:inline">
-            {status?.provider === "self-hosted"
-              ? "High-fidelity document reconstruction active"
-              : "Document conversion active"}
+            High-fidelity document reconstruction active
           </span>
         </div>
       </div>

@@ -2,8 +2,8 @@
  * Office Document Conversion Adapter for Docly.
  *
  * Rules:
- * - High-fidelity Office conversions (Word, Excel, PowerPoint) require server-side
- *   layout rendering engines (LibreOffice / Gotenberg / CloudConvert).
+ * - High-fidelity Office conversions (Word, Excel, PowerPoint) use Docly's
+ *   self-hosted document conversion engine.
  * - Never fake conversions by renaming extensions or returning empty documents.
  * - Server secrets are kept strictly server-side.
  */

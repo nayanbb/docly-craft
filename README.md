@@ -1005,36 +1005,45 @@ npm i
 npm run dev
 ```
 
-### Office Conversion Backend (Gotenberg)
+### Office Conversion Backend (Docly Self-Hosted Engine)
 
-Docly provides high-fidelity conversion of Word (`.docx`, `.doc`), Excel (`.xlsx`, `.xls`), and PowerPoint (`.pptx`, `.ppt`) documents to PDF using **Gotenberg** (containerized LibreOffice).
+Docly provides high-fidelity bidirectional conversion between PDF and Microsoft Office formats (Word `.docx`, Excel `.xlsx`, PowerPoint `.pptx`) using its dedicated self-hosted conversion microservice (`services/converter`).
 
-#### 1. Start Gotenberg with Docker
+#### 1. Start the Converter Microservice
 
-Run the official Gotenberg container locally:
+Run with Docker:
 
 ```sh
-docker run --rm -p "3000:3000" gotenberg/gotenberg:8
+cd services/converter
+docker compose up -d
+```
+
+Or natively with Python 3.12:
+
+```sh
+cd services/converter
+pip install -r requirements.txt
+python -m uvicorn src.server:app --host 0.0.0.0 --port 8001
 ```
 
 #### 2. Configure Environment Variable
 
-In your local project root, create or update `.env`:
+In your project root, create or update `.env`:
 
 ```sh
-GOTENBERG_URL=http://localhost:3000
+DOCLY_CONVERTER_URL=http://localhost:8001
+# DOCLY_CONVERTER_SECRET=your_optional_secret
 ```
 
-> **Security Note:** `GOTENBERG_URL` is strictly a server-side environment variable. It is never exposed in client bundles or public endpoints.
+> **Security Note:** `DOCLY_CONVERTER_URL` and `DOCLY_CONVERTER_SECRET` are strictly server-side environment variables. They are never exposed in client bundles or public endpoints.
 
-#### 3. Conversion Capabilities
+#### 3. Supported Bidirectional Conversions
 
-- **Supported by Gotenberg (Office → PDF):**
+- **Office → PDF:**
   - Word to PDF (`/tools/word-to-pdf`)
   - Excel to PDF (`/tools/excel-to-pdf`)
   - PowerPoint to PDF (`/tools/powerpoint-to-pdf`)
-- **Reverse Conversions (PDF → Office):**
+- **PDF → Office:**
   - PDF to Word (`/tools/pdf-to-word`)
   - PDF to Excel (`/tools/pdf-to-excel`)
   - PDF to PowerPoint (`/tools/pdf-to-powerpoint`)
-  - _Note:_ Gotenberg LibreOffice conversion engine converts Office documents to PDF, not PDF back to Office. Reverse conversions require a dedicated OCR / layout extraction provider (such as CloudConvert via `CLOUDCONVERT_API_KEY`).

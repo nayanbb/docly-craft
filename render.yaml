@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: docly-converter
+    runtime: docker
+    dockerfilePath: services/converter/Dockerfile
+    dockerContext: services/converter
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: MAX_CONCURRENT_CONVERSIONS
+        value: 5
+      - key: CONVERSION_TIMEOUT_SECONDS
+        value: 60

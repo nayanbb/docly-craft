@@ -69,7 +69,7 @@ import {
 } from "@/lib/ai/adapter";
 
 // Office Engine
-import { convertOfficeDocument, isOfficeConversionConfigured } from "@/lib/office/adapter";
+import { convertOfficeDocument } from "@/lib/office/adapter";
 
 // Option Panels
 import { PdfSplitOptions } from "@/components/tool/options/PdfSplitOptions";
@@ -992,13 +992,7 @@ export function ToolPage({ tool }: { tool: Tool }) {
         tool.id === "pdf-to-excel" ||
         tool.id === "pdf-to-powerpoint"
       ) {
-        if (!isOfficeConversionConfigured()) {
-          throw new Error(
-            "Office conversion requires a server-side document conversion service (e.g., LibreOffice or Gotenberg). Please configure your conversion service endpoint in the settings panel below.",
-          );
-        }
-
-        setProgressLabel("Converting via server conversion backend...");
+        setProgressLabel("Converting document...");
         let targetFmt: "pdf" | "docx" | "xlsx" | "pptx" = "pdf";
         if (tool.id.endsWith("-word")) targetFmt = "docx";
         else if (tool.id.endsWith("-excel")) targetFmt = "xlsx";
@@ -1075,7 +1069,7 @@ export function ToolPage({ tool }: { tool: Tool }) {
     tool.id === "document-generator";
 
   // Check if tool is implemented
-  const isImplemented = !isOfficeTool;
+  const isImplemented = true;
 
   return (
     <div className="container-page py-8 sm:py-12">
@@ -1558,39 +1552,23 @@ export function ToolPage({ tool }: { tool: Tool }) {
             )}
 
             <div className="pt-1">
-              {isImplemented ? (
-                <ProcessingButton
-                  label={tool.actionLabel ?? tool.name}
-                  disabled={!canProcess || state === "loading"}
-                  loading={state === "loading"}
-                  hint={
-                    requiresMultiple && files.length < 2
-                      ? "Add at least 2 PDF files to enable merging."
-                      : tool.id === "protect-pdf" && files.length > 0
-                        ? passwordInput.length < 4
-                          ? "Enter a password with at least 4 characters."
-                          : passwordInput !== confirmPasswordInput
-                            ? "Passwords do not match."
-                            : undefined
-                        : undefined
-                  }
-                  onClick={handleProcess}
-                />
-              ) : isOfficeTool ? (
-                <ProcessingButton
-                  label={`${tool.name} (Requires Conversion Backend)`}
-                  disabled={!isOfficeConversionConfigured() || !canProcess}
-                  loading={state === "loading"}
-                  hint="Connect a server-side conversion service in settings above to run high-fidelity Office conversions."
-                  onClick={handleProcess}
-                />
-              ) : (
-                <ProcessingButton
-                  label={`${tool.actionLabel ?? tool.name} — Server-Side Security Required`}
-                  disabled
-                  hint="Standard AES-256 PDF encryption requires a server-side cryptographic engine to ensure Adobe Acrobat compliance."
-                />
-              )}
+              <ProcessingButton
+                label={tool.actionLabel ?? tool.name}
+                disabled={!canProcess || state === "loading"}
+                loading={state === "loading"}
+                hint={
+                  requiresMultiple && files.length < 2
+                    ? "Add at least 2 PDF files to enable merging."
+                    : tool.id === "protect-pdf" && files.length > 0
+                      ? passwordInput.length < 4
+                        ? "Enter a password with at least 4 characters."
+                        : passwordInput !== confirmPasswordInput
+                          ? "Passwords do not match."
+                          : undefined
+                      : undefined
+                }
+                onClick={handleProcess}
+              />
             </div>
           </>
         )}

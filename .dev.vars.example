@@ -9,16 +9,6 @@
 DOCLY_CONVERTER_URL=http://localhost:8001
 # DOCLY_CONVERTER_SECRET=docly_converter_dev_secret
 
-# -----------------------------------------------------------------------------
-# PDF -> Office Conversions (Optional Legacy CloudConvert Fallback)
-# -----------------------------------------------------------------------------
-# CLOUDCONVERT_API_KEY=your_cloudconvert_api_key_here
-# CLOUDCONVERT_FALLBACK=false
-
-# -----------------------------------------------------------------------------
-# Office -> PDF Conversions (Word to PDF, Excel to PDF, PowerPoint to PDF)
-# -----------------------------------------------------------------------------
-# GOTENBERG_URL=http://localhost:3000
 
 # -----------------------------------------------------------------------------
 # Razorpay Subscriptions (Docly Pro ₹25/month)

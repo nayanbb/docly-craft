@@ -100,7 +100,7 @@ async function runRazorpayTestSuite() {
       isConversionLimitedTool("pdf-to-word") &&
       isConversionLimitedTool("word-to-pdf"),
     3,
-    "Conversion limit applies at 10/day for free users on CloudConvert/office conversion tools",
+    "Conversion limit applies at 10/day for free users on office conversion tools",
   );
 
   // 4. 11th conversion attempt returns exact error message and upgrade CTA

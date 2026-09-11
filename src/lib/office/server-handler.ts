@@ -4,7 +4,6 @@ import {
   getOfficeConversionProvider,
   getOfficeConversionProviderForOperation,
   LocalOfficeProvider,
-  CloudConvertProvider,
   resolveServerEnvVar,
   OfficeBackendNotConfiguredError,
   UnsupportedOfficeConversionError,
@@ -63,7 +62,7 @@ function getCallerIdentifier(request: Request): string {
 
 /**
  * Handles /api/convert/status endpoint.
- * Informs the frontend whether a real conversion backend is configured without revealing secrets.
+ * Informs the frontend whether the Docly self-hosted conversion engine is configured and reachable.
  * Accepts optional ?operation query param to report status for a specific tool.
  */
 export async function handleConversionStatusRequest(
@@ -75,11 +74,6 @@ export async function handleConversionStatusRequest(
 
   // 1. Operation-specific status check
   if (operation && VALID_OPERATIONS.has(operation)) {
-    const isReverse =
-      operation === "pdf-to-word" ||
-      operation === "pdf-to-excel" ||
-      operation === "pdf-to-powerpoint";
-
     const provider = getOfficeConversionProviderForOperation(
       operation,
       env as Record<string, unknown> | undefined,
@@ -109,44 +103,6 @@ export async function handleConversionStatusRequest(
           configured: isConfigured && reachable,
           provider: "self-hosted",
           supportedOperations: isConfigured && reachable ? provider.supportedOperations : [],
-          reachable,
-          statusMessage,
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-          },
-        },
-      );
-    }
-
-    if (isReverse) {
-      const isConfigured = provider.isConfigured && provider.id === "cloudconvert";
-      let reachable = isConfigured;
-      let statusMessage = "Document conversion is temporarily unavailable. Please try again later.";
-
-      if (isConfigured && typeof provider.checkHealth === "function") {
-        try {
-          reachable = await provider.checkHealth();
-          if (reachable) {
-            statusMessage = "CloudConvert API Engine is active and reachable.";
-          } else {
-            statusMessage = "CloudConvert service is temporarily unreachable.";
-          }
-        } catch {
-          reachable = false;
-          statusMessage = "CloudConvert health check failed.";
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          configured: isConfigured && reachable,
-          provider: isConfigured ? "cloudconvert" : "none",
-          supportedOperations:
-            isConfigured && reachable ? ["pdf-to-word", "pdf-to-excel", "pdf-to-powerpoint"] : [],
           reachable,
           statusMessage,
         }),
@@ -303,16 +259,6 @@ export async function handleConversionApiRequest(
       env as Record<string, unknown> | undefined,
     );
 
-    if (provider.id === "gotenberg" && typeof provider.checkHealth === "function") {
-      const isUp = await provider.checkHealth();
-      if (!isUp) {
-        const localOffice = new LocalOfficeProvider();
-        if (localOffice.isConfigured && localOffice.supportedOperations.includes(operation)) {
-          provider = localOffice;
-        }
-      }
-    }
-
     if (!provider.isConfigured) {
       return new Response(
         JSON.stringify({
@@ -329,37 +275,11 @@ export async function handleConversionApiRequest(
     const arrayBuffer = await file.arrayBuffer();
     const fileBuffer = new Uint8Array(arrayBuffer);
 
-    let result;
-    try {
-      result = await provider.convert({
-        fileBuffer,
-        fileName: file.name,
-        operation,
-      });
-    } catch (primaryErr) {
-      const fallbackAllowed =
-        resolveServerEnvVar("CLOUDCONVERT_FALLBACK", env).toLowerCase() === "true";
-      const cloudConvertKey = resolveServerEnvVar("CLOUDCONVERT_API_KEY", env);
-
-      if (fallbackAllowed && cloudConvertKey && provider.id !== "cloudconvert") {
-        const fallbackProvider = new CloudConvertProvider(cloudConvertKey);
-        if (
-          fallbackProvider.isConfigured &&
-          fallbackProvider.supportedOperations.includes(operation)
-        ) {
-          result = await fallbackProvider.convert({
-            fileBuffer,
-            fileName: file.name,
-            operation,
-          });
-          provider = fallbackProvider;
-        } else {
-          throw primaryErr;
-        }
-      } else {
-        throw primaryErr;
-      }
-    }
+    const result = await provider.convert({
+      fileBuffer,
+      fileName: file.name,
+      operation,
+    });
 
     // ONLY increment counter upon successful conversion for non-Pro users!
     if (!isPro) {

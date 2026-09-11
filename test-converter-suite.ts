@@ -6,7 +6,6 @@ import http from "node:http";
 import assert from "node:assert";
 import {
   SelfHostedProvider,
-  CloudConvertProvider,
   getOfficeConversionProvider,
   getOfficeConversionProviderForOperation,
   UnconfiguredOfficeProvider,

@@ -23,7 +23,7 @@ export type OfficeToolProcessingState =
 
 export interface ConversionBackendStatus {
   configured: boolean;
-  provider: "gotenberg" | "cloudconvert" | "local-office" | "self-hosted" | "none";
+  provider: "self-hosted" | "local-office" | "none";
   supportedOperations: OfficeConversionOperation[];
   statusMessage?: string;
   reachable?: boolean;

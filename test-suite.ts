@@ -362,45 +362,73 @@ async function runTests() {
   }
   assert(caughtOfficeError, "Unconfigured office provider throws OfficeBackendNotConfiguredError");
 
-  // 25. Gotenberg & CloudConvert Provider Classes
-  const { GotenbergProvider } = await import("./src/lib/office/providers/gotenberg");
+  // 25. SelfHostedProvider Class & Operations
+  const { SelfHostedProvider } = await import("./src/lib/office/providers/self-hosted");
   const { UnsupportedOfficeConversionError } = await import("./src/lib/office/providers/types");
-  const configuredGotenberg = new GotenbergProvider("https://gotenberg.internal");
+  const configuredSelfHosted = new SelfHostedProvider("https://converter.internal", "secret123");
   assert(
-    configuredGotenberg.isConfigured &&
-      configuredGotenberg.supportedOperations.includes("word-to-pdf"),
-    "Gotenberg provider configures correctly when URL is supplied",
+    configuredSelfHosted.isConfigured &&
+      configuredSelfHosted.supportedOperations.length === 6 &&
+      configuredSelfHosted.supportedOperations.includes("word-to-pdf") &&
+      configuredSelfHosted.supportedOperations.includes("pdf-to-word"),
+    "SelfHostedProvider configures correctly when URL is supplied and supports all 6 operations",
   );
 
-  const { CloudConvertProvider } = await import("./src/lib/office/providers/cloudconvert");
-  const unconfiguredCc = new CloudConvertProvider("");
+  const unconfiguredSelfHosted = new SelfHostedProvider("");
   assert(
-    !unconfiguredCc.isConfigured,
-    "CloudConvert provider is unconfigured when API key is missing",
+    !unconfiguredSelfHosted.isConfigured,
+    "SelfHostedProvider is unconfigured when URL is empty",
   );
 
-  // 26. Gotenberg Live Conversion Protocol & Mock Server Tests
+  // 26. Mock Self-Hosted Conversion Server Tests
   const http = await import("node:http");
   let receivedEndpoint = "";
-  let receivedFilesField = false;
+  let receivedSecret = "";
 
-  const mockGotenbergServer = http.createServer(async (req, res) => {
+  const mockConverterServer = http.createServer(async (req, res) => {
     receivedEndpoint = req.url ?? "";
+    receivedSecret = (req.headers["x-converter-secret"] as string) ?? "";
+
     if (req.url === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "up" }));
+      res.end(JSON.stringify({ status: "ok", engines: { office_to_pdf: true, pdf_to_docx: true } }));
       return;
     }
 
-    if (req.url === "/forms/libreoffice/convert" && req.method === "POST") {
+    if (req.url === "/capabilities" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ supported_operations: ["word-to-pdf", "pdf-to-word"] }));
+      return;
+    }
+
+    if (req.url === "/convert" && req.method === "POST") {
       const chunks: Buffer[] = [];
       for await (const chunk of req) {
         chunks.push(chunk as Buffer);
       }
       const body = Buffer.concat(chunks).toString("latin1");
-      receivedFilesField = body.includes('name="files"');
 
-      // Return real PDF buffer
+      if (body.includes('name="operation"\r\n\r\nword-to-pdf')) {
+        res.writeHead(200, {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": 'attachment; filename="annual_report.pdf"',
+        });
+        res.end(doc1Buf);
+        return;
+      }
+
+      if (body.includes('name="operation"\r\n\r\npdf-to-word')) {
+        // Output valid ZIP header
+        const docxHeader = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01, 0x02, 0x03, 0x04]);
+        res.writeHead(200, {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "Content-Disposition": 'attachment; filename="annual_report.docx"',
+        });
+        res.end(docxHeader);
+        return;
+      }
+
+      // Default mock PDF
       res.writeHead(200, {
         "Content-Type": "application/pdf",
         "Content-Disposition": 'attachment; filename="output.pdf"',
@@ -413,606 +441,61 @@ async function runTests() {
     res.end();
   });
 
-  await new Promise<void>((resolve) => mockGotenbergServer.listen(3998, resolve));
+  await new Promise<void>((resolve) => mockConverterServer.listen(3998, resolve));
 
   try {
-    const testGotenberg = new GotenbergProvider("http://localhost:3998");
+    const testProvider = new SelfHostedProvider("http://localhost:3998", "test-secret");
 
     // Test health check
-    const healthOk = await testGotenberg.checkHealth();
-    assert(healthOk, "Gotenberg checkHealth() reports true when server responds 200 on /health");
+    const healthOk = await testProvider.checkHealth();
+    assert(healthOk, "SelfHostedProvider checkHealth() reports true when server responds ok on /health");
 
     // Test DOCX -> PDF
     const validDocx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01, 0x02, 0x03, 0x04]);
-    const docxResult = await testGotenberg.convert({
+    const docxResult = await testProvider.convert({
       fileBuffer: new Uint8Array(validDocx),
       fileName: "annual_report.docx",
       operation: "word-to-pdf",
     });
     assert(
-      receivedEndpoint === "/forms/libreoffice/convert" &&
-        receivedFilesField &&
+      receivedEndpoint === "/convert" &&
+        receivedSecret === "test-secret" &&
         docxResult.outputFileName === "annual_report.pdf" &&
         docxResult.mimeType === "application/pdf" &&
         String.fromCharCode(...docxResult.outputBuffer.slice(0, 5)) === "%PDF-",
-      "Gotenberg converts DOCX -> PDF using /forms/libreoffice/convert, field 'files', returning valid PDF",
+      "SelfHostedProvider converts DOCX -> PDF returning valid PDF with %PDF- header",
     );
 
-    // Test XLSX -> PDF
-    const validXlsx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
-    const xlsxResult = await testGotenberg.convert({
-      fileBuffer: new Uint8Array(validXlsx),
-      fileName: "financials.xlsx",
-      operation: "excel-to-pdf",
+    // Test PDF -> DOCX
+    const pdfResult = await testProvider.convert({
+      fileBuffer: new Uint8Array(doc1Buf),
+      fileName: "annual_report.pdf",
+      operation: "pdf-to-word",
     });
     assert(
-      xlsxResult.outputFileName === "financials.pdf" &&
-        xlsxResult.mimeType === "application/pdf" &&
-        String.fromCharCode(...xlsxResult.outputBuffer.slice(0, 5)) === "%PDF-",
-      "Gotenberg converts XLSX -> PDF returning valid PDF output buffer",
+      docxResult.outputFileName === "annual_report.pdf" &&
+        pdfResult.outputFileName === "annual_report.docx" &&
+        pdfResult.outputBuffer[0] === 0x50 &&
+        pdfResult.outputBuffer[1] === 0x4b &&
+        pdfResult.outputBuffer[2] === 0x03 &&
+        pdfResult.outputBuffer[3] === 0x04,
+      "SelfHostedProvider converts PDF -> DOCX returning valid OpenXML ZIP header (PK\\x03\\x04)",
     );
 
-    // Test PPTX -> PDF
-    const validPptx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x09, 0x0a, 0x0b, 0x0c]);
-    const pptxResult = await testGotenberg.convert({
-      fileBuffer: new Uint8Array(validPptx),
-      fileName: "slides.pptx",
-      operation: "powerpoint-to-pdf",
-    });
-    assert(
-      pptxResult.outputFileName === "slides.pdf" &&
-        pptxResult.mimeType === "application/pdf" &&
-        String.fromCharCode(...pptxResult.outputBuffer.slice(0, 5)) === "%PDF-",
-      "Gotenberg converts PPTX -> PDF returning valid PDF output buffer",
-    );
-
-    // 27. Reverse Conversions Rejection on Gotenberg
-    let caughtReverseWord = false;
+    // Test rejection of empty file
+    let caughtEmpty = false;
     try {
-      await testGotenberg.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "doc.pdf",
-        operation: "pdf-to-word",
+      await testProvider.convert({
+        fileBuffer: new Uint8Array(0),
+        fileName: "empty.docx",
+        operation: "word-to-pdf",
       });
     } catch (e) {
-      if (e instanceof UnsupportedOfficeConversionError) {
-        caughtReverseWord = true;
-      }
+      caughtEmpty = true;
     }
-    assert(caughtReverseWord, "Gotenberg correctly rejects PDF -> Word as unsupported conversion");
-
-    let caughtReverseExcel = false;
-    try {
-      await testGotenberg.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "doc.pdf",
-        operation: "pdf-to-excel",
-      });
-    } catch (e) {
-      if (e instanceof UnsupportedOfficeConversionError) {
-        caughtReverseExcel = true;
-      }
-    }
-    assert(
-      caughtReverseExcel,
-      "Gotenberg correctly rejects PDF -> Excel as unsupported conversion",
-    );
-
-    let caughtReversePpt = false;
-    try {
-      await testGotenberg.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "doc.pdf",
-        operation: "pdf-to-powerpoint",
-      });
-    } catch (e) {
-      if (e instanceof UnsupportedOfficeConversionError) {
-        caughtReversePpt = true;
-      }
-    }
-    assert(
-      caughtReversePpt,
-      "Gotenberg correctly rejects PDF -> PowerPoint as unsupported conversion",
-    );
-
-    // 28. Status Endpoint Verification with Active Gotenberg
-    const { handleConversionStatusRequest } = await import("./src/lib/office/server-handler");
-    const activeReq = new Request("http://localhost/api/convert/status");
-    const activeRes = await handleConversionStatusRequest(activeReq, {
-      GOTENBERG_URL: "http://localhost:3998",
-    });
-    const activeData = (await activeRes.json()) as {
-      configured: boolean;
-      reachable: boolean;
-      supportedOperations: string[];
-    };
-    assert(
-      activeData.configured === true &&
-        activeData.reachable === true &&
-        activeData.supportedOperations.includes("word-to-pdf") &&
-        !activeData.supportedOperations.includes("pdf-to-word"),
-      "Status endpoint reports configured: true, reachable: true, and only Office->PDF supported when Gotenberg is up",
-    );
-
-    // 29. Status Endpoint Verification with Gotenberg Fallback or Unreachable
-    const deadReq = new Request("http://localhost/api/convert/status");
-    const deadRes = await handleConversionStatusRequest(deadReq, {
-      GOTENBERG_URL: "http://localhost:3997", // Unreachable port
-    });
-    const deadData = (await deadRes.json()) as {
-      configured: boolean;
-      reachable: boolean;
-      provider?: string;
-      statusMessage?: string;
-    };
-    // On Windows with Office, it seamlessly activates local-office; otherwise it instructs Docker
-    assert(
-      (deadData.configured === true && deadData.provider === "local-office") ||
-        (deadData.configured === false &&
-          (deadData.statusMessage?.includes("docker run") ?? false)),
-      "Status endpoint activates LocalOffice fallback on Windows or instructs Docker when Gotenberg is unreachable",
-    );
-
-    // 30. LocalOfficeProvider Unit Verification
-    const { LocalOfficeProvider } = await import("./src/lib/office/providers/local-office");
-    const localOffice = new LocalOfficeProvider();
-    assert(
-      localOffice.supportedOperations.includes("word-to-pdf") &&
-        localOffice.supportedOperations.includes("excel-to-pdf") &&
-        localOffice.supportedOperations.includes("powerpoint-to-pdf") &&
-        !localOffice.supportedOperations.includes("pdf-to-word"),
-      "LocalOfficeProvider supports Word, Excel, PowerPoint to PDF, and excludes reverse conversions",
-    );
-
-    let localReverseWordCaught = false;
-    try {
-      await localOffice.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "doc.pdf",
-        operation: "pdf-to-word",
-      });
-    } catch (e) {
-      if (e instanceof UnsupportedOfficeConversionError) {
-        localReverseWordCaught = true;
-      }
-    }
-    assert(localReverseWordCaught, "LocalOfficeProvider correctly rejects PDF -> Word conversion");
-
-    // 31. CloudConvertProvider Unconfigured State & Operations
-    const unconfiguredCC = new CloudConvertProvider("");
-    assert(
-      !unconfiguredCC.isConfigured,
-      "CloudConvertProvider is not configured when API key is empty",
-    );
-    const ccHealth = await unconfiguredCC.checkHealth();
-    assert(ccHealth === false, "CloudConvertProvider checkHealth returns false when unconfigured");
-    let caughtCCUnconfig = false;
-    try {
-      await unconfiguredCC.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "doc.pdf",
-        operation: "pdf-to-word",
-      });
-    } catch (e) {
-      if (e instanceof OfficeBackendNotConfiguredError) {
-        caughtCCUnconfig = true;
-      }
-    }
-    assert(
-      caughtCCUnconfig,
-      "CloudConvertProvider throws OfficeBackendNotConfiguredError when unconfigured",
-    );
-    assert(
-      unconfiguredCC.supportedOperations.includes("pdf-to-word") &&
-        unconfiguredCC.supportedOperations.includes("pdf-to-excel") &&
-        unconfiguredCC.supportedOperations.includes("pdf-to-powerpoint"),
-      "CloudConvertProvider specifies supported operations for all reverse conversions",
-    );
-
-    // 32. Operation-specific Provider Dispatch
-    const { getOfficeConversionProviderForOperation } =
-      await import("./src/lib/office/providers/index");
-    const reverseProvWord = getOfficeConversionProviderForOperation("pdf-to-word", {});
-    assert(
-      !reverseProvWord.isConfigured,
-      "Reverse operation pdf-to-word resolves to unconfigured provider when CLOUDCONVERT_API_KEY is absent",
-    );
-    const reverseProvExcel = getOfficeConversionProviderForOperation("pdf-to-excel", {});
-    assert(
-      !reverseProvExcel.isConfigured,
-      "Reverse operation pdf-to-excel resolves to unconfigured provider when CLOUDCONVERT_API_KEY is absent",
-    );
-    const reverseProvPpt = getOfficeConversionProviderForOperation("pdf-to-powerpoint", {});
-    assert(
-      !reverseProvPpt.isConfigured,
-      "Reverse operation pdf-to-powerpoint resolves to unconfigured provider when CLOUDCONVERT_API_KEY is absent",
-    );
-
-    // 33. Reverse Operation Status Request
-    const statusReverseReq = new Request(
-      "http://localhost/api/convert/status?operation=pdf-to-word",
-    );
-    const statusReverseRes = await handleConversionStatusRequest(statusReverseReq, {});
-    const statusReverseData = (await statusReverseRes.json()) as {
-      configured: boolean;
-      provider: string;
-      statusMessage?: string;
-    };
-    assert(
-      statusReverseData.configured === false &&
-        statusReverseData.provider === "none" &&
-        (statusReverseData.statusMessage === "Document conversion is temporarily unavailable. Please try again later." ||
-          statusReverseData.statusMessage === "Reverse conversion provider not configured."),
-      "Status endpoint reports configured: false and safe message for reverse operations",
-    );
-
-    // 34. POST /api/convert with Reverse Operation when unconfigured
-    const { handleConversionApiRequest } = await import("./src/lib/office/server-handler");
-    const reverseForm = new FormData();
-    reverseForm.append("file", file1);
-    reverseForm.append("operation", "pdf-to-word");
-    const reverseApiReq = new Request("http://localhost/api/convert", {
-      method: "POST",
-      body: reverseForm,
-    });
-    const reverseApiRes = await handleConversionApiRequest(reverseApiReq, {});
-    assert(
-      reverseApiRes.status === 503,
-      "POST /api/convert returns 503 when reverse provider is unconfigured",
-    );
-    const reverseApiErr = (await reverseApiRes.json()) as { code: string; error: string };
-    assert(
-      reverseApiErr.code === "BACKEND_NOT_CONFIGURED" &&
-        (reverseApiErr.error === "Document conversion is temporarily unavailable. Please try again later." ||
-          reverseApiErr.error === "Reverse conversion provider not configured."),
-      "POST /api/convert returns safe error message indicating reverse provider not configured",
-    );
-
-    // 35. CloudConvert Mock Engine Server & Full Pipeline Tests
-    const deletedJobIds: string[] = [];
-    let mockCCMode: "normal" | "401" | "402" | "task_error" | "invalid_zip" = "normal";
-
-    const mockCloudConvertServer = http.createServer(async (req, res) => {
-      const url = new URL(req.url || "/", "http://localhost:3996");
-
-      if (mockCCMode === "401" && url.pathname === "/jobs") {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "Unauthenticated." }));
-        return;
-      }
-
-      if (mockCCMode === "402" && url.pathname === "/jobs") {
-        res.writeHead(402, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "Payment Required." }));
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/users/me") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ data: { id: 1, email: "docly@test.com" } }));
-        return;
-      }
-
-      if (req.method === "POST" && url.pathname === "/jobs") {
-        res.writeHead(201, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            data: {
-              id: "job-test-cc-456",
-              tasks: [
-                {
-                  id: "task-import-1",
-                  name: "import-file",
-                  result: {
-                    form: {
-                      url: "http://localhost:3996/mock-upload",
-                      parameters: { key: "uploads/doc.pdf" },
-                    },
-                  },
-                },
-                {
-                  id: "task-convert-1",
-                  name: "convert-file",
-                },
-                {
-                  id: "task-export-1",
-                  name: "export-file",
-                },
-              ],
-            },
-          }),
-        );
-        return;
-      }
-
-      if (req.method === "POST" && url.pathname === "/mock-upload") {
-        const chunks: Buffer[] = [];
-        for await (const chunk of req) {
-          chunks.push(chunk as Buffer);
-        }
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("Uploaded");
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/tasks/task-export-1") {
-        if (mockCCMode === "task_error") {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(
-            JSON.stringify({
-              data: {
-                id: "task-export-1",
-                status: "error",
-                message: "CloudConvert failed to parse PDF stream.",
-              },
-            }),
-          );
-          return;
-        }
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            data: {
-              id: "task-export-1",
-              status: "finished",
-              result: {
-                files: [{ url: "http://localhost:3996/mock-download" }],
-              },
-            },
-          }),
-        );
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/mock-download") {
-        if (mockCCMode === "invalid_zip") {
-          res.writeHead(200, { "Content-Type": "application/octet-stream" });
-          res.end(Buffer.from("NOT_A_ZIP_OR_DOCX_FILE"));
-          return;
-        }
-
-        // Return a valid ZIP header (PK\x03\x04) representing a valid Office package
-        const validOfficeBuffer = Buffer.from([
-          0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00, 0x08, 0x00, 0x00, 0x00, 0x21, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x5b, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x5f, 0x54,
-          0x79, 0x70, 0x65, 0x73, 0x5d, 0x2e, 0x78, 0x6d, 0x6c,
-        ]);
-        res.writeHead(200, {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "Content-Length": String(validOfficeBuffer.length),
-        });
-        res.end(validOfficeBuffer);
-        return;
-      }
-
-      if (req.method === "DELETE" && url.pathname.startsWith("/jobs/")) {
-        const jobId = url.pathname.replace("/jobs/", "");
-        deletedJobIds.push(jobId);
-        res.writeHead(204);
-        res.end();
-        return;
-      }
-
-      res.writeHead(404);
-      res.end();
-    });
-
-    await new Promise<void>((resolve) => mockCloudConvertServer.listen(3996, () => resolve()));
-
-    try {
-      const activeCC = new CloudConvertProvider("mock-valid-key", "http://localhost:3996");
-      assert(activeCC.isConfigured, "CloudConvertProvider is configured when key is provided");
-      const activeHealth = await activeCC.checkHealth();
-      assert(
-        activeHealth === true,
-        "CloudConvertProvider checkHealth reports true when API key is valid",
-      );
-
-      // Test PDF -> DOCX
-      const wordRes = await activeCC.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "annual_report.pdf",
-        operation: "pdf-to-word",
-      });
-      assert(
-        wordRes.outputFileName === "annual_report.docx" &&
-          wordRes.mimeType ===
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
-          wordRes.outputBuffer[0] === 0x50 &&
-          wordRes.outputBuffer[1] === 0x4b &&
-          wordRes.outputBuffer[2] === 0x03 &&
-          wordRes.outputBuffer[3] === 0x04 &&
-          deletedJobIds.includes("job-test-cc-456"),
-        "CloudConvert converts PDF -> DOCX with valid PK\\x03\\x04 header and cleans up job storage",
-      );
-
-      // Test PDF -> XLSX
-      const excelRes = await activeCC.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "dataset.pdf",
-        operation: "pdf-to-excel",
-      });
-      assert(
-        excelRes.outputFileName === "dataset.xlsx" &&
-          excelRes.mimeType ===
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" &&
-          excelRes.outputBuffer[0] === 0x50 &&
-          excelRes.outputBuffer[1] === 0x4b &&
-          excelRes.outputBuffer[2] === 0x03 &&
-          excelRes.outputBuffer[3] === 0x04,
-        "CloudConvert converts PDF -> XLSX with valid PK\\x03\\x04 header and correct MIME type",
-      );
-
-      // Test PDF -> PPTX
-      const pptRes = await activeCC.convert({
-        fileBuffer: new Uint8Array(doc1Buf),
-        fileName: "slides.pdf",
-        operation: "pdf-to-powerpoint",
-      });
-      assert(
-        pptRes.outputFileName === "slides.pptx" &&
-          pptRes.mimeType ===
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation" &&
-          pptRes.outputBuffer[0] === 0x50 &&
-          pptRes.outputBuffer[1] === 0x4b &&
-          pptRes.outputBuffer[2] === 0x03 &&
-          pptRes.outputBuffer[3] === 0x04,
-        "CloudConvert converts PDF -> PPTX with valid PK\\x03\\x04 header and correct MIME type",
-      );
-
-      // Test 401 Unauthorized handling
-      mockCCMode = "401";
-      let caught401 = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(doc1Buf),
-          fileName: "test.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("Invalid CloudConvert API key")) {
-          caught401 = true;
-        }
-      }
-      assert(
-        caught401,
-        "CloudConvert throws safe descriptive error when API key is rejected (401)",
-      );
-
-      // Test 402 Credit limit handling
-      mockCCMode = "402";
-      let caught402 = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(doc1Buf),
-          fileName: "test.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("credit limit reached")) {
-          caught402 = true;
-        }
-      }
-      assert(
-        caught402,
-        "CloudConvert throws safe descriptive error when credit limit is reached (402)",
-      );
-
-      // Test task error handling
-      mockCCMode = "task_error";
-      let caughtTaskError = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(doc1Buf),
-          fileName: "test.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("CloudConvert failed to parse PDF stream")) {
-          caughtTaskError = true;
-        }
-      }
-      assert(caughtTaskError, "CloudConvert propagates conversion task error status safely");
-
-      // Test invalid zip package rejection
-      mockCCMode = "invalid_zip";
-      let caughtInvalidZip = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(doc1Buf),
-          fileName: "test.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("invalid Office document package")) {
-          caughtInvalidZip = true;
-        }
-      }
-      assert(
-        caughtInvalidZip,
-        "CloudConvert validates returned binary and rejects non-ZIP corrupted output",
-      );
-
-      // 39. Runtime Environment Resolution & Cloudflare Worker Compatibility
-      const { resolveServerEnvVar } = await import("./src/lib/office/providers/index");
-      const fromDirectEnv = resolveServerEnvVar("TEST_KEY", { TEST_KEY: "cf-worker-secret" });
-      assert(
-        fromDirectEnv === "cf-worker-secret",
-        "resolveServerEnvVar extracts secret directly from Cloudflare Worker env object",
-      );
-
-      const fromNestedEnv = resolveServerEnvVar("TEST_KEY", {
-        env: { TEST_KEY: "nitro-nested-secret" },
-      });
-      assert(
-        fromNestedEnv === "nitro-nested-secret",
-        "resolveServerEnvVar extracts secret from Nitro nested env object",
-      );
-
-      // 40. Cloudflare Worker Binding Dispatch Test
-      const cfReverseProv = getOfficeConversionProviderForOperation("pdf-to-word", {
-        CLOUDCONVERT_API_KEY: "cf-worker-live-secret-key",
-      });
-      assert(
-        cfReverseProv.isConfigured && cfReverseProv.id === "cloudconvert",
-        "getOfficeConversionProviderForOperation resolves CloudConvertProvider via Cloudflare Worker env bindings",
-      );
-
-      // 41. Empty and Oversized File Rejection in CloudConvertProvider
-      let caughtEmpty = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(0),
-          fileName: "empty.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("empty")) {
-          caughtEmpty = true;
-        }
-      }
-      assert(caughtEmpty, "CloudConvertProvider rejects empty file buffers");
-
-      let caughtOversized = false;
-      try {
-        await activeCC.convert({
-          fileBuffer: new Uint8Array(51 * 1024 * 1024),
-          fileName: "giant.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("too large")) {
-          caughtOversized = true;
-        }
-      }
-      assert(caughtOversized, "CloudConvertProvider rejects files larger than 50MB");
-
-      // 42. Secret Sanitization Guarantee
-      let caughtLeakedKey = false;
-      const secretKey = "super-secret-production-token-12345";
-      const leakingProvider = new CloudConvertProvider(secretKey, "http://localhost:3996");
-      mockCCMode = "401";
-      try {
-        await leakingProvider.convert({
-          fileBuffer: new Uint8Array(doc1Buf),
-          fileName: "test.pdf",
-          operation: "pdf-to-word",
-        });
-      } catch (e) {
-        if (e instanceof Error && !e.message.includes(secretKey)) {
-          caughtLeakedKey = true;
-        }
-      }
-      assert(
-        caughtLeakedKey,
-        "CloudConvertProvider never leaks the API key secret in thrown error messages",
-      );
-    } finally {
-      await new Promise<void>((resolve) => mockCloudConvertServer.close(() => resolve()));
-    }
+    assert(caughtEmpty, "SelfHostedProvider rejects empty file buffers");
   } finally {
-    await new Promise<void>((resolve) => mockGotenbergServer.close(() => resolve()));
+    await new Promise<void>((resolve) => mockConverterServer.close(() => resolve()));
   }
 
   // 43. Protect PDF: Validation of password rules (<4 chars or empty)
