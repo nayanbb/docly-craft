@@ -165,7 +165,7 @@ async function main() {
     const res = await pkceClient.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "https://nayanbb-docly-craft.honeysuckle-cellar.workers.dev/auth/callback",
+        redirectTo: "https://docly-tools.vercel.app/auth/callback",
         skipBrowserRedirect: true,
       },
     });
@@ -186,7 +186,7 @@ async function main() {
     assert.ok(parsedUrl.searchParams.get("code_challenge"), "Must include code_challenge");
     assert.strictEqual(
       parsedUrl.searchParams.get("redirect_to"),
-      "https://nayanbb-docly-craft.honeysuckle-cellar.workers.dev/auth/callback"
+      "https://docly-tools.vercel.app/auth/callback"
     );
 
     // Follow redirect to Google OAuth to verify Google receives response_type=code and client_id
