@@ -1,0 +1,8 @@
+# Exclude isolated converter microservice from Vercel deployment payload and framework auto-detection
+services/converter
+services/converter/**
+
+# Temporary test scratch folders
+scratch/
+scratch-test-outputs/
+test-fixtures/
