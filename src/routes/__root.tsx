@@ -131,6 +131,21 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Canonical Production Domain Guard:
+  // If human traffic reaches a non-canonical Vercel deployment URL (*.vercel.app other than docly-tools.vercel.app),
+  // seamlessly transition the browser to the canonical production domain.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.location) return;
+    const hostname = window.location.hostname;
+    if (
+      hostname.endsWith(".vercel.app") &&
+      hostname !== "docly-tools.vercel.app"
+    ) {
+      const canonicalTarget = `https://docly-tools.vercel.app${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.replace(canonicalTarget);
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

@@ -4,6 +4,24 @@ import { supabase, isSupabaseConfigured, formatAuthError } from "@/lib/supabase/
 import type { AuthContextType, UserProfile } from "@/lib/supabase/types";
 import { sanitizeRedirectPath } from "@/lib/auth/require-auth";
 
+/**
+ * Canonical production origin for Docly authentication.
+ * Under NO circumstances should authentication redirects ever use deployment-specific URLs
+ * (such as docly-xxxxx.vercel.app, docly-git-main-*.vercel.app, or preview URLs).
+ */
+export const CANONICAL_PRODUCTION_ORIGIN = "https://docly-tools.vercel.app";
+
+export function getCanonicalAuthOrigin(): string {
+  if (typeof window !== "undefined" && window.location && window.location.origin) {
+    const currentOrigin = window.location.origin;
+    // Allow local development
+    if (currentOrigin.includes("localhost") || currentOrigin.includes("127.0.0.1")) {
+      return currentOrigin;
+    }
+  }
+  return CANONICAL_PRODUCTION_ORIGIN;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -155,10 +173,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const canonicalOrigin = getCanonicalAuthOrigin();
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: `${canonicalOrigin}/dashboard`,
           data: {
             display_name: displayName?.trim() || email.split("@")[0],
           },
@@ -253,9 +273,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const canonicalOrigin = getCanonicalAuthOrigin();
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${origin}/reset-password`,
+        redirectTo: `${canonicalOrigin}/reset-password`,
       });
 
       if (error) {
@@ -334,8 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const origin =
-        typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const canonicalOrigin = getCanonicalAuthOrigin();
       const safePath = sanitizeRedirectPath(redirectTo, "/dashboard");
 
       // Persist intended post-auth destination in sessionStorage
@@ -348,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Clean canonical callback URL with no dynamic query parameters
-      const callbackUrl = `${origin}/auth/callback`;
+      const callbackUrl = `${canonicalOrigin}/auth/callback`;
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

@@ -105,11 +105,11 @@ async function main() {
   });
 
   // 6. Supabase Client PKCE Configuration in client.ts
-  await runTest("6. client.ts explicitly configures flowType: 'pkce' and detectSessionInUrl: false", () => {
+  await runTest("6. client.ts explicitly configures flowType: 'pkce' and detectSessionInUrl: true", () => {
     const clientPath = "c:/Users/nayan/docly-craft/src/lib/supabase/client.ts";
     const content = fs.readFileSync(clientPath, "utf-8");
     assert.strictEqual(content.includes('flowType: "pkce"'), true, "Missing flowType: 'pkce'");
-    assert.strictEqual(content.includes("detectSessionInUrl: false"), true, "detectSessionInUrl must be false to avoid double-exchange race condition");
+    assert.strictEqual(content.includes("detectSessionInUrl: true"), true, "detectSessionInUrl must be true for session recovery");
   });
 
   // 7. Dedicated /auth/callback route file with deduplication
@@ -128,7 +128,7 @@ async function main() {
   await runTest("8. auth-context signInWithGoogle uses canonical /auth/callback and persists destination", () => {
     const authContextPath = "c:/Users/nayan/docly-craft/src/lib/supabase/auth-context.tsx";
     const content = fs.readFileSync(authContextPath, "utf-8");
-    assert.strictEqual(content.includes('const callbackUrl = `${origin}/auth/callback`'), true);
+    assert.strictEqual(content.includes('const callbackUrl = `${canonicalOrigin}/auth/callback`'), true);
     assert.strictEqual(content.includes('sessionStorage.setItem("docly_auth_next", safePath)'), true);
     assert.strictEqual(content.includes("access_type: \"offline\""), true);
   });

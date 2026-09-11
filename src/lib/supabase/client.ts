@@ -54,7 +54,7 @@ const activeKey = isSupabaseConfigured
 export const supabase: SupabaseClient = createClient(activeUrl, activeKey, {
   auth: {
     flowType: "pkce",
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
     persistSession: typeof window !== "undefined" && isSupabaseConfigured,
     autoRefreshToken: typeof window !== "undefined" && isSupabaseConfigured,
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
@@ -86,7 +86,12 @@ export function formatAuthError(err: unknown): string {
   if (lower.includes("email not confirmed") || lower.includes("confirm your email")) {
     return "Please confirm your email address before signing in. Check your inbox for the confirmation link.";
   }
-  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("rate_limit") ||
+    lower.includes("too many requests") ||
+    lower.includes("over_email_send_rate_limit")
+  ) {
     return "Too many requests. Please wait a few moments and try again.";
   }
   if (lower.includes("network") || lower.includes("failed to fetch")) {
