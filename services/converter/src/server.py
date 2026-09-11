@@ -53,7 +53,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONVERTER_SECRET = os.getenv("CONVERTER_SECRET", "").strip()
+CONVERTER_SECRET = (
+    os.getenv("DOCLY_CONVERTER_SECRET", "") or os.getenv("CONVERTER_SECRET", "")
+).strip()
 MAX_CONCURRENT_CONVERSIONS = int(os.getenv("MAX_CONCURRENT_CONVERSIONS", "5"))
 CONVERSION_TIMEOUT_SECONDS = int(os.getenv("CONVERSION_TIMEOUT_SECONDS", "60"))
 

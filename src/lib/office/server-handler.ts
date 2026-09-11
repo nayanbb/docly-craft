@@ -323,7 +323,7 @@ export async function handleConversionApiRequest(
     }
 
     console.error("Office conversion error:", err instanceof Error ? err.name : "Error");
-    const safeMessage = "Conversion is temporarily unavailable. Please try again shortly.";
+    const safeMessage = "Document conversion is temporarily unavailable. Please try again later.";
     return new Response(
       JSON.stringify({
         ok: false,
