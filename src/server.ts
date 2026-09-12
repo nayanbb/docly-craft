@@ -82,6 +82,13 @@ import {
   handleRazorpayStatusRequest,
 } from "./lib/razorpay/server";
 import {
+  handlePayUCreatePaymentRequest,
+  handlePayUCallbackRequest,
+  handlePayUWebhookRequest,
+  handlePayUCancelRequest,
+  handlePayUStatusRequest,
+} from "./lib/payu/server";
+import {
   handleAdminMetricsRequest,
   handleAdminPaymentsRequest,
   handleAdminSubscriptionsRequest,
@@ -132,7 +139,24 @@ export default {
         return await handleAiAssistantRequest(request, env);
       }
 
-      // Razorpay Payments & Subscription Endpoints
+      // PayU Payments & Subscription Endpoints (Primary Gateway)
+      if (url.pathname === "/api/payu/create-payment") {
+        return await handlePayUCreatePaymentRequest(request, env);
+      }
+      if (url.pathname === "/api/payu/callback") {
+        return await handlePayUCallbackRequest(request, env);
+      }
+      if (url.pathname === "/api/payu/webhook") {
+        return await handlePayUWebhookRequest(request, env);
+      }
+      if (url.pathname === "/api/payu/cancel") {
+        return await handlePayUCancelRequest(request, env);
+      }
+      if (url.pathname === "/api/payu/status") {
+        return await handlePayUStatusRequest(request, env);
+      }
+
+      // Razorpay Payments & Subscription Endpoints (Legacy Fallback)
       if (url.pathname === "/api/razorpay/subscription") {
         return await handleRazorpaySubscriptionRequest(request, env);
       }

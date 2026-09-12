@@ -13,6 +13,7 @@ export const Route = createFileRoute("/payment/success")({
     subscription_id: typeof search["subscription_id"] === "string" ? search["subscription_id"] : undefined,
     payment_id: typeof search["payment_id"] === "string" ? search["payment_id"] : undefined,
     session_id: typeof search["session_id"] === "string" ? search["session_id"] : undefined,
+    txnid: typeof search["txnid"] === "string" ? search["txnid"] : undefined,
     redirect: typeof search["redirect"] === "string" ? search["redirect"] : undefined,
   }),
   head: () => ({
@@ -25,12 +26,13 @@ export const Route = createFileRoute("/payment/success")({
 });
 
 function PaymentSuccessRoute() {
-  const { subscription_id, payment_id, redirect } = Route.useSearch();
+  const { subscription_id, payment_id, session_id, txnid, redirect } = Route.useSearch();
   const { user, isLoading: isAuthLoading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const safeTarget = sanitizeRedirectPath(redirect, "/dashboard");
+  const activeTxn = txnid || session_id || payment_id || subscription_id;
 
   // Status state: "verifying" | "confirmed" | "timeout"
   const [status, setStatus] = useState<"verifying" | "confirmed" | "timeout">("verifying");
@@ -38,16 +40,66 @@ function PaymentSuccessRoute() {
   const [countdown, setCountdown] = useState<number>(4);
 
   const pollAttempts = useRef(0);
-  const maxAttempts = 20;
+  const maxAttempts = 10;
+
+  const runVerificationCheck = async () => {
+    if (!user) return;
+    try {
+      // 1. Direct query on public.subscriptions
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("plan, status, current_period_end")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const plan = getEffectivePlan(data as RawSubscriptionData);
+
+      if (plan === "pro") {
+        setStatus("confirmed");
+        queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
+        triggerSubscriptionRefresh();
+        return;
+      }
+
+      // 2. Authoritative server verification check with PayU
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (token) {
+        const statusUrl = activeTxn
+          ? `/api/payu/status?txnid=${encodeURIComponent(activeTxn)}`
+          : "/api/payu/status";
+        const res = await fetch(statusUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const statusJson = await res.json().catch(() => ({}));
+          if (statusJson.isPro || statusJson.proActive || statusJson.effectivePlan === "pro") {
+            setStatus("confirmed");
+            queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
+            triggerSubscriptionRefresh();
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error polling subscription verification:", err);
+    }
+
+    pollAttempts.current += 1;
+    if (pollAttempts.current >= maxAttempts) {
+      setStatus("timeout");
+    }
+  };
 
   useEffect(() => {
     if (isAuthLoading) return;
 
     if (!user) {
-      // If not logged in, redirect to login with this page preserved
       navigate({
         to: "/login",
-        search: { redirect: `/payment/success?subscription_id=${subscription_id || ""}&redirect=${encodeURIComponent(safeTarget)}` },
+        search: { redirect: `/payment/success?txnid=${activeTxn || ""}&redirect=${encodeURIComponent(safeTarget)}` },
       });
       return;
     }
@@ -55,43 +107,21 @@ function PaymentSuccessRoute() {
     let isMounted = true;
     let timerId: NodeJS.Timeout;
 
-    async function checkProStatus() {
-      try {
-        const { data } = await supabase
-          .from("subscriptions")
-          .select("plan, status, current_period_end")
-          .eq("user_id", user!.id)
-          .maybeSingle();
-
-        const plan = getEffectivePlan(data as RawSubscriptionData);
-
-        if (plan === "pro") {
-          if (!isMounted) return;
-          setStatus("confirmed");
-          queryClient.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
-          triggerSubscriptionRefresh();
-          return;
-        }
-      } catch (err) {
-        console.warn("Error polling subscription verification:", err);
+    async function poll() {
+      if (status === "confirmed") return;
+      await runVerificationCheck();
+      if (isMounted && pollAttempts.current < maxAttempts && status !== "confirmed") {
+        timerId = setTimeout(poll, 1000);
       }
-
-      pollAttempts.current += 1;
-      if (pollAttempts.current >= maxAttempts) {
-        if (isMounted) setStatus("timeout");
-        return;
-      }
-
-      timerId = setTimeout(checkProStatus, 1000);
     }
 
-    checkProStatus();
+    poll();
 
     return () => {
       isMounted = false;
       clearTimeout(timerId);
     };
-  }, [user, isAuthLoading, navigate, safeTarget, subscription_id, queryClient]);
+  }, [user, isAuthLoading, navigate, safeTarget, activeTxn, queryClient]);
 
   // Handle stage animation sequence once confirmed (respecting prefers-reduced-motion)
   useEffect(() => {
@@ -138,6 +168,12 @@ function PaymentSuccessRoute() {
     return () => clearInterval(interval);
   }, [stage, navigate, safeTarget]);
 
+  const handleRetryVerification = () => {
+    pollAttempts.current = 0;
+    setStatus("verifying");
+    runVerificationCheck();
+  };
+
   return (
     <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
       <div className="w-full max-w-md text-center">
@@ -148,9 +184,9 @@ function PaymentSuccessRoute() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-xl font-bold text-foreground">Confirming your subscription...</h1>
+              <h1 className="text-xl font-bold text-foreground">Verifying your payment...</h1>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                We're securely verifying your payment with Razorpay and activating your Docly Pro benefits.
+                We're securely verifying your PayU payment and activating your Docly Pro benefits.
               </p>
             </div>
 
@@ -168,20 +204,21 @@ function PaymentSuccessRoute() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-xl font-bold text-foreground">Payment Received</h1>
+              <h1 className="text-xl font-bold text-foreground">Payment Verification Pending</h1>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Your payment was received. Webhook confirmation is taking a few moments. Your account will automatically activate as Docly Pro shortly.
+                We couldn't verify this payment yet. Your account has not been upgraded.
               </p>
             </div>
 
             <div className="pt-2 flex flex-col gap-2.5">
-              <Link
-                to={safeTarget as any}
+              <button
+                type="button"
+                onClick={handleRetryVerification}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-xs hover:opacity-90 transition-opacity"
               >
-                <span>Continue to Docly</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+                <RefreshCw className="h-4 w-4" />
+                <span>Try Verifying Again</span>
+              </button>
               <Link
                 to="/account"
                 className="inline-flex items-center justify-center rounded-xl bg-surface px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border transition-colors"
