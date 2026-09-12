@@ -1,0 +1,231 @@
+warning: in the working copy of 'src/lib/monetization/subscription.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/lib/monetization/subscription.ts b/src/lib/monetization/subscription.ts[m
+[1mindex 772737e..ef5ec85 100644[m
+[1m--- a/src/lib/monetization/subscription.ts[m
+[1m+++ b/src/lib/monetization/subscription.ts[m
+[36m@@ -1,5 +1,5 @@[m
+ /**[m
+[31m- * Docly Subscription Architecture & State Management (Razorpay)[m
+[32m+[m[32m * Docly Subscription Architecture & State Management (Provider-Neutral: PayU & Legacy)[m
+  *[m
+  * Enforces server/database verification for Docly Pro status.[m
+  * NEVER trusts localStorage, URL query parameters, or client-editable state.[m
+[36m@@ -7,8 +7,9 @@[m
+ [m
+ import { useEffect } from "react";[m
+ import { useQuery, useQueryClient } from "@tanstack/react-query";[m
+[32m+[m[32mimport { createClient, type SupabaseClient } from "@supabase/supabase-js";[m
+ import { useAuth } from "@/lib/supabase/auth-context";[m
+[31m-import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";[m
+[32m+[m[32mimport { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey } from "@/lib/supabase/client";[m
+ import {[m
+   getEffectivePlan,[m
+   evaluateSubscription,[m
+[36m@@ -114,20 +115,30 @@[m [mexport function useSubscription(): UserSubscription {[m
+ [m
+         if (!fullQuery.error && fullQuery.data) {[m
+           subData = fullQuery.data as RawSubscriptionData;[m
+[31m-        } else {[m
+[31m-          // Backward-compatible fallback to core schema if provider columns are not yet added[m
+[31m-          const fallbackQuery = await supabase[m
+[31m-            .from("subscriptions")[m
+[31m-            .select("plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_subscription_id")[m
+[31m-            .eq("user_id", user.id)[m
+[31m-            .maybeSingle();[m
+[32m+[m[32m        } else if (fullQuery.error) {[m
+[32m+[m[32m          const errMsg = fullQuery.error.message || String(fullQuery.error);[m
+[32m+[m[32m          const isColumnError =[m
+[32m+[m[32m            fullQuery.error.code === "42703" ||[m
+[32m+[m[32m            fullQuery.error.code === "PGRST204" ||[m
+[32m+[m[32m            errMsg.includes("does not exist");[m
+ [m
+[31m-          if (fallbackQuery.data) {[m
+[31m-            subData = {[m
+[31m-              ...fallbackQuery.data,[m
+[31m-              provider: "payu",[m
+[31m-              provider_subscription_id: fallbackQuery.data.razorpay_subscription_id,[m
+[31m-            } as RawSubscriptionData;[m
+[32m+[m[32m          if (isColumnError) {[m
+[32m+[m[32m            // Backward-compatible fallback to core schema if provider columns are not yet added[m
+[32m+[m[32m            const fallbackQuery = await supabase[m
+[32m+[m[32m              .from("subscriptions")[m
+[32m+[m[32m              .select("plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_subscription_id")[m
+[32m+[m[32m              .eq("user_id", user.id)[m
+[32m+[m[32m              .maybeSingle();[m
+[32m+[m
+[32m+[m[32m            if (fallbackQuery.data) {[m
+[32m+[m[32m              subData = {[m
+[32m+[m[32m                ...fallbackQuery.data,[m
+[32m+[m[32m                provider: "payu",[m
+[32m+[m[32m                provider_subscription_id: fallbackQuery.data.razorpay_subscription_id,[m
+[32m+[m[32m              } as RawSubscriptionData;[m
+[32m+[m[32m            }[m
+[32m+[m[32m          } else {[m
+[32m+[m[32m            console.warn("[SUBSCRIPTION_CLIENT_QUERY_NOTICE]", errMsg);[m
+           }[m
+         }[m
+       } catch (err) {[m
+[36m@@ -206,13 +217,52 @@[m [mexport function useSubscription(): UserSubscription {[m
+   };[m
+ }[m
+ [m
+[32m+[m[32mfunction resolveServerSecret(name: string, env?: unknown): string {[m
+[32m+[m[32m  if (env && typeof env === "object" && name in env) {[m
+[32m+[m[32m    const val = (env as Record<string, unknown>)[name];[m
+[32m+[m[32m    if (typeof val === "string" && val.trim().length > 0) return val.trim();[m
+[32m+[m[32m  }[m
+[32m+[m[32m  if (typeof process !== "undefined" && process.env && process.env[name]) {[m
+[32m+[m[32m    const val = process.env[name];[m
+[32m+[m[32m    if (typeof val === "string" && val.trim().length > 0) return val.trim();[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return "";[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * Server-authoritative Supabase client factory.[m
+[32m+[m[32m *[m
+[32m+[m[32m * Uses SUPABASE_SERVICE_ROLE_KEY if available on the server to bypass RLS,[m
+[32m+[m[32m * or attaches the verified user JWT in global headers so that the RLS policy[m
+[32m+[m[32m * ("user_id = auth.uid()") evaluates successfully.[m
+[32m+[m[32m */[m
+[32m+[m[32mfunction getServerSupabaseClient(token?: string, env?: unknown): SupabaseClient {[m
+[32m+[m[32m  const serviceKey = resolveServerSecret("SUPABASE_SERVICE_ROLE_KEY", env);[m
+[32m+[m[32m  if (serviceKey && serviceKey.trim().length > 10 && supabaseUrl) {[m
+[32m+[m[32m    return createClient(supabaseUrl, serviceKey, {[m
+[32m+[m[32m      auth: { persistSession: false, autoRefreshToken: false },[m
+[32m+[m[32m    });[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  // Fallback: Use anon client with the user's Bearer token in global headers so RLS policy[m
+[32m+[m[32m  // "user_id = auth.uid()" will successfully allow the user to read their own subscription/entitlement[m
+[32m+[m[32m  if (token && supabaseUrl && supabaseAnonKey) {[m
+[32m+[m[32m    return createClient(supabaseUrl, supabaseAnonKey, {[m
+[32m+[m[32m      auth: { persistSession: false, autoRefreshToken: false },[m
+[32m+[m[32m      global: { headers: { Authorization: `Bearer ${token}` } },[m
+[32m+[m[32m    });[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  return supabase;[m
+[32m+[m[32m}[m
+[32m+[m
+ /**[m
+  * Server-side helper to verify user Pro status from request Authorization header.[m
+  * Decodes the Supabase JWT and evaluates permanent admin grants and active subscriptions.[m
+  */[m
+ export async function verifyServerUserSubscription([m
+   request: Request,[m
+[31m-  _env?: unknown,[m
+[32m+[m[32m  env?: unknown,[m
+ ): Promise<{[m
+   userId?: string | undefined;[m
+   userEmail?: string | undefined;[m
+[36m@@ -231,7 +281,9 @@[m [mexport async function verifyServerUserSubscription([m
+   }[m
+ [m
+   try {[m
+[31m-    const { data: userData, error: userError } = await supabase.auth.getUser(token);[m
+[32m+[m[32m    const serverDb = getServerSupabaseClient(token, env);[m
+[32m+[m
+[32m+[m[32m    const { data: userData, error: userError } = await serverDb.auth.getUser(token);[m
+     if (userError || !userData.user) {[m
+       return { isPro: false, plan: "free" };[m
+     }[m
+[36m@@ -250,25 +302,69 @@[m [mexport async function verifyServerUserSubscription([m
+     }[m
+ [m
+     // 2. Query both public.subscriptions and public.entitlements[m
+[31m-    const [subResult, entResult] = await Promise.all([[m
+[31m-      supabase[m
+[31m-        .from("subscriptions")[m
+[31m-        .select([m
+[31m-          "plan, status, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",[m
+[31m-        )[m
+[31m-        .eq("user_id", userId)[m
+[31m-        .maybeSingle(),[m
+[31m-      supabase[m
+[31m-        .from("entitlements")[m
+[31m-        .select("plan, grant_type, expires_at, notes")[m
+[31m-        .eq("user_id", userId)[m
+[31m-        .maybeSingle(),[m
+[31m-    ]);[m
+[32m+[m[32m    let subData: RawSubscriptionData | null = null;[m
+[32m+[m[32m    let entData: RawEntitlementData | null = null;[m
+[32m+[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const [subResult, entResult] = await Promise.all([[m
+[32m+[m[32m        serverDb[m
+[32m+[m[32m          .from("subscriptions")[m
+[32m+[m[32m          .select([m
+[32m+[m[32m            "plan, status, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",[m
+[32m+[m[32m          )[m
+[32m+[m[32m          .eq("user_id", userId)[m
+[32m+[m[32m          .maybeSingle(),[m
+[32m+[m[32m        serverDb[m
+[32m+[m[32m          .from("entitlements")[m
+[32m+[m[32m          .select("plan, grant_type, expires_at, notes")[m
+[32m+[m[32m          .eq("user_id", userId)[m
+[32m+[m[32m          .maybeSingle(),[m
+[32m+[m[32m      ]);[m
+[32m+[m
+[32m+[m[32m      if (subResult.error) {[m
+[32m+[m[32m        const safeError = subResult.error.message || String(subResult.error);[m
+[32m+[m[32m        console.error([m
+[32m+[m[32m          `[SERVER_SUBSCRIPTION_QUERY_ERROR] Failed to query subscription for user=${userId.substring(0, 8)}...:`,[m
+[32m+[m[32m          safeError,[m
+[32m+[m[32m        );[m
+[32m+[m
+[32m+[m[32m        const isColumnError =[m
+[32m+[m[32m          subResult.error.code === "42703" ||[m
+[32m+[m[32m          subResult.error.code === "PGRST204" ||[m
+[32m+[m[32m          safeError.includes("does not exist");[m
+[32m+[m
+[32m+[m[32m        if (isColumnError) {[m
+[32m+[m[32m          const fallbackQuery = await serverDb[m
+[32m+[m[32m            .from("subscriptions")[m
+[32m+[m[32m            .select([m
+[32m+[m[32m              "plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_subscription_id",[m
+[32m+[m[32m            )[m
+[32m+[m[32m            .eq("user_id", userId)[m
+[32m+[m[32m            .maybeSingle();[m
+[32m+[m
+[32m+[m[32m          if (!fallbackQuery.error && fallbackQuery.data) {[m
+[32m+[m[32m            subData = {[m
+[32m+[m[32m              ...fallbackQuery.data,[m
+[32m+[m[32m              provider: "payu",[m
+[32m+[m[32m              provider_subscription_id: fallbackQuery.data.razorpay_subscription_id,[m
+[32m+[m[32m            } as RawSubscriptionData;[m
+[32m+[m[32m          }[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } else if (subResult.data) {[m
+[32m+[m[32m        subData = subResult.data as RawSubscriptionData;[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      if (!entResult.error && entResult.data) {[m
+[32m+[m[32m        entData = entResult.data as RawEntitlementData;[m
+[32m+[m[32m      }[m
+[32m+[m[32m    } catch (queryErr) {[m
+[32m+[m[32m      console.error("[SERVER_ENTITLEMENT_ERROR] Unexpected database query error:", queryErr);[m
+[32m+[m[32m    }[m
+ [m
+     const evaluated = resolveUserEntitlement([m
+       userId,[m
+[31m-      subResult.data as RawSubscriptionData | null,[m
+[31m-      entResult.data as RawEntitlementData | null,[m
+[32m+[m[32m      subData,[m
+[32m+[m[32m      entData,[m
+     );[m
+ [m
+     return {[m
+[36m@@ -276,9 +372,10 @@[m [mexport async function verifyServerUserSubscription([m
+       userEmail,[m
+       isPro: evaluated.isPro,[m
+       plan: evaluated.effectivePlan,[m
+[31m-      subscriptionData: (subResult.data as RawSubscriptionData) || undefined,[m
+[32m+[m[32m      subscriptionData: subData || undefined,[m
+     };[m
+[31m-  } catch {[m
+[32m+[m[32m  } catch (err) {[m
+[32m+[m[32m    console.error("[SERVER_AUTH_VERIFICATION_ERROR] Token verification failed:", err);[m
+     return { isPro: false, plan: "free" };[m
+   }[m
+ }[m

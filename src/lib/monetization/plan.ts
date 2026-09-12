@@ -1,5 +1,5 @@
 /**
- * Centralized Plan and Expiration Evaluation Service (Razorpay)
+ * Centralized Plan and Expiration Evaluation Service (Provider-Neutral: PayU & Legacy)
  *
  * Rules:
  * 1. Pro access requires:

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Docly Subscription Architecture & State Management (Provider-Neutral: PayU & Legacy)
  *
  * Enforces server/database verification for Docly Pro status.
@@ -220,74 +220,46 @@ export function useSubscription(): UserSubscription {
 function resolveServerSecret(name: string, env?: unknown): string {
   if (env && typeof env === "object" && name in env) {
     const val = (env as Record<string, unknown>)[name];
-    if (typeof val === "string" && val.trim().length > 0) {
-      return val.trim();
-    }
+    if (typeof val === "string" && val.trim().length > 0) return val.trim();
   }
-
-  if (
-    typeof process !== "undefined" &&
-    process.env &&
-    typeof process.env[name] === "string" &&
-    process.env[name].trim().length > 0
-  ) {
-    return process.env[name].trim();
+  if (typeof process !== "undefined" && process.env && process.env[name]) {
+    const val = process.env[name];
+    if (typeof val === "string" && val.trim().length > 0) return val.trim();
   }
-
   return "";
 }
 
 /**
- * Server-authoritative subscription verification.
+ * Server-authoritative Supabase client factory.
  *
- * IMPORTANT:
- * - Authentication is performed with the user's Bearer token.
- * - Subscription/entitlement database reads use a separate privileged
- *   Supabase client when SUPABASE_SERVICE_ROLE_KEY is available.
- * - The user's Authorization header is NEVER attached to the privileged
- *   database client, so RLS cannot accidentally downgrade a paid user.
+ * Uses SUPABASE_SERVICE_ROLE_KEY if available on the server to bypass RLS,
+ * or attaches the verified user JWT in global headers so that the RLS policy
+ * ("user_id = auth.uid()") evaluates successfully.
  */
 function getServerSupabaseClient(token?: string, env?: unknown): SupabaseClient {
-  const serverUrl =
-    resolveServerSecret("SUPABASE_URL", env) ||
-    resolveServerSecret("VITE_SUPABASE_URL", env) ||
-    supabaseUrl;
-
-  const secretKey = resolveServerSecret("SUPABASE_SERVICE_ROLE_KEY", env);
-
-  if (serverUrl && secretKey && secretKey.length > 10) {
-    return createClient(serverUrl, secretKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+  const serviceKey = resolveServerSecret("SUPABASE_SERVICE_ROLE_KEY", env);
+  if (serviceKey && serviceKey.trim().length > 10 && supabaseUrl) {
+    return createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
   }
 
-  // Safe fallback for environments where the server secret is not configured.
-  // The user's JWT is attached so normal RLS policies can read that user's rows.
-  const anonKey =
-    resolveServerSecret("SUPABASE_ANON_KEY", env) ||
-    resolveServerSecret("VITE_SUPABASE_ANON_KEY", env) ||
-    supabaseAnonKey;
-
-  if (serverUrl && anonKey && token) {
-    return createClient(serverUrl, anonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
+  // Fallback: Use anon client with the user's Bearer token in global headers so RLS policy
+  // "user_id = auth.uid()" will successfully allow the user to read their own subscription/entitlement
+  if (token && supabaseUrl && supabaseAnonKey) {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
     });
   }
 
   return supabase;
 }
 
+/**
+ * Server-side helper to verify user Pro status from request Authorization header.
+ * Decodes the Supabase JWT and evaluates permanent admin grants and active subscriptions.
+ */
 export async function verifyServerUserSubscription(
   request: Request,
   env?: unknown,
@@ -299,62 +271,27 @@ export async function verifyServerUserSubscription(
   subscriptionData?: RawSubscriptionData | undefined;
 }> {
   const authHeader = request.headers.get("Authorization");
-
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return { isPro: false, plan: "free" };
   }
 
-  const token = authHeader.slice("Bearer ".length).trim();
-
+  const token = authHeader.replace("Bearer ", "").trim();
   if (!token) {
     return { isPro: false, plan: "free" };
   }
 
   try {
-    /*
-     * Authentication client.
-     *
-     * This validates the supplied access token and gives us the canonical
-     * Supabase user ID. It is deliberately separate from the privileged
-     * database client.
-     */
-    const authUrl =
-      resolveServerSecret("SUPABASE_URL", env) ||
-      resolveServerSecret("VITE_SUPABASE_URL", env) ||
-      supabaseUrl;
+    const serverDb = getServerSupabaseClient(token, env);
 
-    const authKey =
-      resolveServerSecret("SUPABASE_ANON_KEY", env) ||
-      resolveServerSecret("VITE_SUPABASE_ANON_KEY", env) ||
-      supabaseAnonKey;
-
-    if (!authUrl || !authKey) {
-      console.error("[SERVER_AUTH_CONFIG_ERROR] Supabase URL/key unavailable.");
-      return { isPro: false, plan: "free" };
-    }
-
-    const authClient = createClient(authUrl, authKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: userData, error: userError } =
-      await authClient.auth.getUser(token);
-
+    const { data: userData, error: userError } = await serverDb.auth.getUser(token);
     if (userError || !userData.user) {
-      console.error(
-        "[SERVER_AUTH_VERIFICATION_ERROR]",
-        userError?.message || "No authenticated user",
-      );
       return { isPro: false, plan: "free" };
     }
 
     const userId = userData.user.id;
     const userEmail = userData.user.email || undefined;
 
-    // Permanent admin Pro grant.
+    // 1. Permanent Admin Pro User Grant Check (Server-authoritative)
     if (isPermanentAdminProUser(userId)) {
       return {
         userId,
@@ -364,65 +301,70 @@ export async function verifyServerUserSubscription(
       };
     }
 
-    /*
-     * Database client.
-     *
-     * If SUPABASE_SERVICE_ROLE_KEY exists, this client bypasses RLS.
-     * Crucially, we DO NOT attach the user's Bearer token to it.
-     */
-    const db = getServerSupabaseClient(token, env);
-
+    // 2. Query both public.subscriptions and public.entitlements
     let subData: RawSubscriptionData | null = null;
     let entData: RawEntitlementData | null = null;
 
-    const subResult = await db
-      .from("subscriptions")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
+    try {
+      const [subResult, entResult] = await Promise.all([
+        serverDb
+          .from("subscriptions")
+          .select(
+            "plan, status, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",
+          )
+          .eq("user_id", userId)
+          .maybeSingle(),
+        serverDb
+          .from("entitlements")
+          .select("plan, grant_type, expires_at, notes")
+          .eq("user_id", userId)
+          .maybeSingle(),
+      ]);
 
-    if (subResult.error) {
-      console.error(
-        "[SERVER_SUBSCRIPTION_QUERY_ERROR]",
-        subResult.error.message,
-      );
-    } else if (subResult.data) {
-      subData = subResult.data as RawSubscriptionData;
-    }
+      if (subResult.error) {
+        const safeError = subResult.error.message || String(subResult.error);
+        console.error(
+          `[SERVER_SUBSCRIPTION_QUERY_ERROR] Failed to query subscription for user=${userId.substring(0, 8)}...:`,
+          safeError,
+        );
 
-    const entResult = await db
-      .from("entitlements")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
+        const isColumnError =
+          subResult.error.code === "42703" ||
+          subResult.error.code === "PGRST204" ||
+          safeError.includes("does not exist");
 
-    if (entResult.error) {
-      // Entitlements are optional; subscription can independently grant Pro.
-      console.warn(
-        "[SERVER_ENTITLEMENT_QUERY_NOTICE]",
-        entResult.error.message,
-      );
-    } else if (entResult.data) {
-      entData = entResult.data as RawEntitlementData;
+        if (isColumnError) {
+          const fallbackQuery = await serverDb
+            .from("subscriptions")
+            .select(
+              "plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_subscription_id",
+            )
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (!fallbackQuery.error && fallbackQuery.data) {
+            subData = {
+              ...fallbackQuery.data,
+              provider: "payu",
+              provider_subscription_id: fallbackQuery.data.razorpay_subscription_id,
+            } as RawSubscriptionData;
+          }
+        }
+      } else if (subResult.data) {
+        subData = subResult.data as RawSubscriptionData;
+      }
+
+      if (!entResult.error && entResult.data) {
+        entData = entResult.data as RawEntitlementData;
+      }
+    } catch (queryErr) {
+      console.error("[SERVER_ENTITLEMENT_ERROR] Unexpected database query error:", queryErr);
     }
 
     const evaluated = resolveUserEntitlement(
       userId,
       subData,
       entData,
-    );
-
-    console.log(
-      "[SERVER_PRO_CHECK]",
-      JSON.stringify({
-        userId: `${userId.substring(0, 8)}...`,
-        hasSubscription: Boolean(subData),
-        subscriptionPlan: subData?.plan ?? null,
-        subscriptionStatus: subData?.status ?? null,
-        provider: subData?.provider ?? null,
-        evaluatedPlan: evaluated.effectivePlan,
-        isPro: evaluated.isPro,
-      }),
     );
 
     return {
@@ -433,14 +375,7 @@ export async function verifyServerUserSubscription(
       subscriptionData: subData || undefined,
     };
   } catch (err) {
-    console.error(
-      "[SERVER_AUTH_VERIFICATION_ERROR]",
-      err instanceof Error ? err.message : String(err),
-    );
-
-    return {
-      isPro: false,
-      plan: "free",
-    };
+    console.error("[SERVER_AUTH_VERIFICATION_ERROR] Token verification failed:", err);
+    return { isPro: false, plan: "free" };
   }
 }

@@ -89,61 +89,119 @@ runTest("5. Anonymous request resolves to FREE", () => {
   assert.strictEqual(result.status, "none");
 });
 
-// 6. Active Paying Subscriber
-runTest("6. Active Razorpay subscriber resolves to PRO", () => {
+// --- PHASE 13 MANDATORY TEST CASES (CASES 1 - 10) ---
+
+// CASE 1: PayU active subscription
+runTest("CASE 1: PayU active subscription (future period) -> isPro = true", () => {
   const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  const activeSub = {
+  const payuActiveSub = {
     plan: "pro",
     status: "active",
+    provider: "payu",
+    provider_subscription_id: "payu_test_12345",
     current_period_end: futureDate,
-    razorpay_subscription_id: "sub_test123",
   };
-  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, activeSub as any, null);
+  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, payuActiveSub as any, null);
   assert.strictEqual(result.isPro, true);
   assert.strictEqual(result.effectivePlan, "pro");
   assert.strictEqual(result.status, "active");
-  assert.strictEqual(result.razorpaySubscriptionId, "sub_test123");
+  assert.strictEqual(result.provider, "payu");
+  assert.strictEqual(result.providerSubscriptionId, "payu_test_12345");
 });
 
-// 7. Cancelled Subscription before period end
-runTest("7. Cancelled Razorpay subscription before period end remains PRO until expiry", () => {
-  const futureDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
-  const cancelledSub = {
+// CASE 2: PayU expired subscription
+runTest("CASE 2: PayU expired subscription -> isPro = false", () => {
+  const pastDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const payuExpiredSub = {
     plan: "pro",
-    status: "cancelled",
-    cancel_at_period_end: true,
-    current_period_end: futureDate,
-    razorpay_subscription_id: "sub_test123",
-  };
-  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, cancelledSub as any, null);
-  assert.strictEqual(result.isPro, true);
-  assert.strictEqual(result.effectivePlan, "pro");
-  assert.strictEqual(result.cancelAtPeriodEnd, true);
-});
-
-// 8. Cancelled Subscription past period end
-runTest("8. Cancelled Razorpay subscription past period end resolves to FREE / EXPIRED", () => {
-  const pastDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
-  const expiredSub = {
-    plan: "pro",
-    status: "cancelled",
-    cancel_at_period_end: true,
+    status: "active",
+    provider: "payu",
+    provider_subscription_id: "payu_test_expired",
     current_period_end: pastDate,
   };
-  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, expiredSub as any, null);
+  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, payuExpiredSub as any, null);
   assert.strictEqual(result.isPro, false);
   assert.strictEqual(result.effectivePlan, "free");
   assert.strictEqual(result.isExpired, true);
 });
 
-// 9. Database Entitlements Table Support
-runTest("9. Database entitlement with NULL expires_at gives lifetime PRO", () => {
+// CASE 3: PayU cancelled at period end but period still active
+runTest("CASE 3: PayU cancelled at period end but period still active -> isPro = true", () => {
+  const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const payuCancelledActiveSub = {
+    plan: "pro",
+    status: "cancelled",
+    cancel_at_period_end: true,
+    provider: "payu",
+    provider_subscription_id: "payu_test_cancelled_grace",
+    current_period_end: futureDate,
+  };
+  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, payuCancelledActiveSub as any, null);
+  assert.strictEqual(result.isPro, true);
+  assert.strictEqual(result.effectivePlan, "pro");
+  assert.strictEqual(result.cancelAtPeriodEnd, true);
+  assert.strictEqual(result.isCancelled, true);
+  assert.strictEqual(result.isExpired, false);
+});
+
+// CASE 4: PayU cancelled and period expired
+runTest("CASE 4: PayU cancelled and period expired -> isPro = false", () => {
+  const pastDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const payuCancelledExpiredSub = {
+    plan: "pro",
+    status: "cancelled",
+    cancel_at_period_end: true,
+    provider: "payu",
+    provider_subscription_id: "payu_test_cancelled_expired",
+    current_period_end: pastDate,
+  };
+  const result = resolveUserEntitlement(SUBSCRIBER_USER_ID, payuCancelledExpiredSub as any, null);
+  assert.strictEqual(result.isPro, false);
+  assert.strictEqual(result.effectivePlan, "free");
+  assert.strictEqual(result.isExpired, true);
+});
+
+// CASE 5: Free user
+runTest("CASE 5: Free user -> isPro = false", () => {
+  const freeSub = {
+    plan: "free",
+    status: "active",
+  };
+  const result = resolveUserEntitlement(ORDINARY_USER_ID, freeSub as any, null);
+  assert.strictEqual(result.isPro, false);
+  assert.strictEqual(result.effectivePlan, "free");
+
+  // Also user with no subscription row
+  const noSubResult = resolveUserEntitlement(ORDINARY_USER_ID, null, null);
+  assert.strictEqual(noSubResult.isPro, false);
+  assert.strictEqual(noSubResult.effectivePlan, "free");
+  assert.strictEqual(noSubResult.status, "none");
+});
+
+// CASE 6: Anonymous user
+runTest("CASE 6: Anonymous user -> isPro = false", () => {
+  const result = resolveUserEntitlement(null, null, null);
+  assert.strictEqual(result.isPro, false);
+  assert.strictEqual(result.effectivePlan, "free");
+  assert.strictEqual(result.status, "none");
+});
+
+// CASE 7: Permanent admin user
+runTest("CASE 7: Permanent admin user -> isPro = true", () => {
+  const result = resolveUserEntitlement(PERMANENT_TEST_USER_ID, null, null);
+  assert.strictEqual(result.isPro, true);
+  assert.strictEqual(result.effectivePlan, "pro");
+  assert.strictEqual(result.status, "active");
+});
+
+// CASE 8: Entitlement with expires_at NULL
+runTest("CASE 8: Entitlement with expires_at NULL -> isPro = true (lifetime)", () => {
   const otherUser = "99999999-8888-7777-6666-555555555555";
   const dbEntitlement = {
     plan: "pro",
     grant_type: "admin",
     expires_at: null,
-    notes: "Lifetime test grant",
+    notes: "Lifetime grant",
   };
   assert.strictEqual(isEntitlementActive(dbEntitlement), true);
   const result = resolveUserEntitlement(otherUser, null, dbEntitlement);
@@ -152,8 +210,8 @@ runTest("9. Database entitlement with NULL expires_at gives lifetime PRO", () =>
   assert.strictEqual(result.status, "active");
 });
 
-// 10. Database Entitlement Expired
-runTest("10. Expired database entitlement resolves to FREE", () => {
+// CASE 9: Entitlement expired
+runTest("CASE 9: Entitlement expired -> isPro = false", () => {
   const otherUser = "99999999-8888-7777-6666-555555555555";
   const pastDate = new Date(Date.now() - 1000).toISOString();
   const dbEntitlement = {
@@ -165,6 +223,33 @@ runTest("10. Expired database entitlement resolves to FREE", () => {
   const result = resolveUserEntitlement(otherUser, null, dbEntitlement);
   assert.strictEqual(result.isPro, false);
   assert.strictEqual(result.effectivePlan, "free");
+});
+
+// CASE 10: PayU subscription with NO Razorpay IDs (mandatory test)
+runTest("CASE 10: PayU subscription with NO Razorpay IDs -> isPro = true", () => {
+  const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const purelyPayUSub = {
+    plan: "pro",
+    status: "active",
+    provider: "payu",
+    provider_subscription_id: "payu_sub_strictly_no_razorpay",
+    provider_customer_id: "payu_customer_123",
+    provider_plan_id: "pro_monthly_25",
+    current_period_end: futureDate,
+    current_period_start: new Date().toISOString(),
+    cancel_at_period_end: false,
+    // Explicitly NO Razorpay IDs
+    razorpay_customer_id: undefined,
+    razorpay_subscription_id: undefined,
+    razorpay_plan_id: undefined,
+  };
+  const result = resolveUserEntitlement("user_purely_payu", purelyPayUSub as any, null);
+  assert.strictEqual(result.isPro, true, "Pure PayU subscription must unlock Pro");
+  assert.strictEqual(result.effectivePlan, "pro", "Effective plan must be pro");
+  assert.strictEqual(result.status, "active", "Status must be active");
+  assert.strictEqual(result.provider, "payu", "Provider must be payu");
+  assert.strictEqual(result.providerSubscriptionId, "payu_sub_strictly_no_razorpay");
+  assert.strictEqual(result.razorpaySubscriptionId, undefined, "Razorpay ID is completely undefined");
 });
 
 // 11. File Size Limits (Free = 50MB, Pro = 250MB)
