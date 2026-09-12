@@ -1,5 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ToolPage } from "@/components/tool/ToolPage";
+import { ReductionMakerTool } from "@/components/tool/reduction/ReductionMakerTool";
 import { toolBySlug } from "@/lib/tools";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
@@ -33,6 +34,18 @@ function ToolRoute() {
   const { slug } = Route.useParams();
   const tool = toolBySlug(slug);
   if (!tool) return <ToolNotFound />;
+
+  if (slug === "reduction-maker" || tool.id === "reduction-maker") {
+    return (
+      <ErrorBoundary
+        fallbackTitle={`${tool.name} encountered an issue`}
+        fallbackMessage="We couldn't process this tool view. Your files were not uploaded or stored. You can try again or explore other tools."
+      >
+        <ReductionMakerTool tool={tool} />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary
       fallbackTitle={`${tool.name} encountered an issue`}

@@ -271,6 +271,19 @@ export const tools: Tool[] = [
     formats: ["PDF"],
     status: "available",
   }),
+  t({
+    id: "reduction-maker",
+    name: "Reduction Maker",
+    category: "organize-pdf",
+    group: "pdf",
+    description:
+      "Reduce a multi-page PDF into a selected number of physical sheets while automatically arranging all pages for double-sided printing.",
+    icon: Layers,
+    route: "/tools/reduction-maker",
+    formats: ["PDF"],
+    status: "available",
+    actionLabel: "Create Reduced PDF",
+  }),
 
   // Optimize PDF
   t({
