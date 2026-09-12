@@ -1,36 +1,25 @@
 /**
  * Docly Entitlement Resolution Engine
  *
- * Implements centralized, server-authoritative Pro access evaluation:
+ * Centralized, server-authoritative Pro access evaluation.
  *
- *   Permanent Admin Pro Grant (Code or DB Entitlement)
- *                     OR
- *       Active Razorpay Pro Subscription
- *                     ↓
- *                    PRO
- *                 Otherwise
- *                     ↓
- *                   FREE
+ * Pro access is granted by:
+ * 1. Permanent admin/test grant
+ * 2. Active database entitlement
+ * 3. Active paid subscription from a supported payment provider
  *
- * Rules:
- * 1. Specified permanent test/admin user IDs permanently receive Docly Pro without Razorpay payments.
- * 2. Database grants in `public.entitlements` with expires_at = NULL are permanent and non-expiring.
- * 3. Ordinary users require a verified, active Razorpay subscription (current_period_end > Date.now()).
- * 4. Anonymous users are ALWAYS Free.
- * 5. NEVER trusts client localStorage, URL query params, or client-editable flags.
+ * Anonymous users are always Free.
+ * Client localStorage, URL parameters, and client-editable flags are never trusted.
  */
 
 import {
   evaluateSubscription,
   type RawSubscriptionData,
   type EffectiveSubscription,
-  type PlanType,
-  type SubscriptionStatus,
 } from "./plan";
 
 /**
- * Registry of permanent admin/test account User IDs entitled to lifetime Docly Pro access.
- * Managed securely server-side.
+ * Registry of permanent admin/test accounts with lifetime Pro access.
  */
 export const PERMANENT_PRO_USER_IDS: ReadonlySet<string> = new Set<string>([
   "3b686e20-8f22-4e1c-b274-6dfd7b520994",
@@ -44,28 +33,30 @@ export interface RawEntitlementData {
 }
 
 /**
- * Checks if a given Supabase user ID has a permanent admin Pro grant.
+ * Checks whether a user has a permanent admin/test Pro grant.
  */
 export function isPermanentAdminProUser(userId?: string | null): boolean {
   if (!userId) return false;
+
   return PERMANENT_PRO_USER_IDS.has(userId.trim().toLowerCase());
 }
 
 /**
- * Validates whether a database entitlement record is currently active.
- * If `expires_at` is NULL or undefined, the grant is permanent and never expires.
+ * Checks whether a database entitlement is currently active.
+ *
+ * NULL expires_at means the entitlement does not expire.
  */
 export function isEntitlementActive(
   entitlement?: RawEntitlementData | null,
   referenceTimeMs: number = Date.now(),
 ): boolean {
   if (!entitlement) return false;
-  if (entitlement.plan !== "pro") return false;
+  if (entitlement.plan?.toLowerCase() !== "pro") return false;
 
-  // NULL or undefined expires_at indicates a permanent lifetime grant
   if (entitlement.expires_at) {
     const expiresMs = new Date(entitlement.expires_at).getTime();
-    if (isNaN(expiresMs) || expiresMs <= referenceTimeMs) {
+
+    if (Number.isNaN(expiresMs) || expiresMs <= referenceTimeMs) {
       return false;
     }
   }
@@ -74,13 +65,13 @@ export function isEntitlementActive(
 }
 
 /**
- * Unified Entitlement Resolver.
+ * Unified entitlement resolver.
  *
- * Evaluates all entitlement sources with strict priority:
- * 1. Permanent Admin Pro user ID match -> PRO (active, non-expiring)
- * 2. Active Database Entitlement grant (`public.entitlements`) -> PRO
- * 3. Active Razorpay Pro subscription (status in active/authenticated, unexpired) -> PRO
- * 4. Otherwise -> FREE
+ * Priority:
+ * 1. Permanent admin/test Pro
+ * 2. Active database entitlement
+ * 3. Active paid subscription (PayU or legacy Razorpay)
+ * 4. Free
  */
 export function resolveUserEntitlement(
   userId?: string | null,
@@ -88,7 +79,7 @@ export function resolveUserEntitlement(
   rawEntitlement?: RawEntitlementData | null,
   referenceTimeMs: number = Date.now(),
 ): EffectiveSubscription {
-  // 1. Permanent Admin Pro User ID Check
+  // 1. Permanent admin/test Pro
   if (isPermanentAdminProUser(userId)) {
     return {
       effectivePlan: "pro",
@@ -98,15 +89,13 @@ export function resolveUserEntitlement(
       isCancelled: false,
       isPastDue: false,
       cancelAtPeriodEnd: false,
-      currentPeriodEnd: undefined, // Non-expiring permanent grant
+      currentPeriodEnd: undefined,
       currentPeriodStart: undefined,
-      razorpayCustomerId: undefined,
-      razorpaySubscriptionId: undefined,
-      razorpayPlanId: undefined,
+      provider: "admin",
     };
   }
 
-  // 2. Database Entitlement Grant Check (public.entitlements)
+  // 2. Database entitlement
   if (isEntitlementActive(rawEntitlement, referenceTimeMs)) {
     return {
       effectivePlan: "pro",
@@ -118,18 +107,19 @@ export function resolveUserEntitlement(
       cancelAtPeriodEnd: false,
       currentPeriodEnd: rawEntitlement?.expires_at || undefined,
       currentPeriodStart: undefined,
-      razorpayCustomerId: undefined,
-      razorpaySubscriptionId: undefined,
-      razorpayPlanId: undefined,
+      provider: "entitlement",
     };
   }
 
-  // 3. Razorpay Subscription Evaluation
+  // 3. Paid subscription.
+  //
+  // evaluateSubscription() is provider-neutral and supports
+  // provider_subscription_id/provider_customer_id/provider_plan_id.
   if (rawSub) {
     return evaluateSubscription(rawSub, referenceTimeMs);
   }
 
-  // 4. Default: Anonymous / Free
+  // 4. Free
   return {
     effectivePlan: "free",
     isPro: false,
