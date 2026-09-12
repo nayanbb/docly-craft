@@ -94,11 +94,20 @@ import {
   handleAdminSubscriptionsRequest,
 } from "./lib/admin/server-handler";
 import { handleContactFormRequest } from "./lib/contact/server-handler";
-
+import { createSitemap } from "./lib/seo/sitemap";
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const url = new URL(request.url);
+      if (url.pathname === "/sitemap.xml") {
+        return new Response(createSitemap(), {
+          status: 200,
+          headers: {
+            "content-type": "application/xml; charset=utf-8",
+            "cache-control": "public, max-age=3600",
+          },
+        });
+      }
       if (url.pathname === "/api/pdf/unlock") {
         return await handlePdfUnlockRequest(request, env);
       }
