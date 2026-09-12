@@ -27,6 +27,7 @@ import {
   createReducedPdf,
   getPdfPageCount,
   type ReductionPlanSummary,
+  type ReductionSize,
 } from "@/lib/pdf/reduction-maker";
 import { toast } from "sonner";
 
@@ -34,7 +35,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
-  const [sheetCount, setSheetCount] = useState<9 | 12 | 16>(9);
+  const [reductionSize, setReductionSize] = useState<ReductionSize>(9);
   const [state, setState] = useState<ToolState>("idle");
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | undefined>(undefined);
@@ -85,27 +86,15 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
     setProgress(0);
   };
 
-  // Calculate dynamic reduction plan whenever pageCount or sheetCount changes
+  // Calculate dynamic reduction plan whenever pageCount or reductionSize changes
   const plan: ReductionPlanSummary | null = useMemo(() => {
     if (!pageCount || pageCount <= 0) return null;
     try {
-      return calculateReductionPlan(pageCount, sheetCount);
+      return calculateReductionPlan(pageCount, reductionSize);
     } catch (err) {
       return null;
     }
-  }, [pageCount, sheetCount]);
-
-  // User-facing distribution description
-  const distributionText = useMemo(() => {
-    if (!plan) return "";
-    if (plan.totalPdfPages < plan.selectedSheetCount * 2) {
-      return `1 original page per printable side (fits comfortably in ${plan.actualSheetCount} sheets)`;
-    }
-    if (plan.minPagesPerSide === plan.maxPagesPerSide) {
-      return `${plan.minPagesPerSide} original page${plan.minPagesPerSide === 1 ? "" : "s"} per printable side`;
-    }
-    return `${plan.minPagesPerSide}–${plan.maxPagesPerSide} original pages per printable side`;
-  }, [plan]);
+  }, [pageCount, reductionSize]);
 
   const handleProcess = async () => {
     if (!file || !pageCount || !plan) return;
@@ -119,7 +108,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
     setProgressLabel("Analyzing document and preparing duplex layout...");
 
     try {
-      const result = await createReducedPdf(file, sheetCount, (pct) => {
+      const result = await createReducedPdf(file, reductionSize, (pct) => {
         setProgress(pct);
         if (pct < 30) {
           setProgressLabel("Reading original pages...");
@@ -132,8 +121,12 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
 
       setDownloadBlobData(result.blob);
       const baseName = file.name.replace(/\.[^/.]+$/, "");
-      setDownloadName(`${baseName}-reduced-${result.sheetCount}sheets.pdf`);
-      setSuccessDetail(`${result.totalPdfPages} pages arranged across ${result.sheetCount} sheets`);
+      setDownloadName(`${baseName}-reduced-${reductionSize}per-side.pdf`);
+      setSuccessDetail(
+        `${result.totalPdfPages} pages reduced into ${result.physicalSheetCount} physical sheet${
+          result.physicalSheetCount === 1 ? "" : "s"
+        } (${result.outputPageCount} printable sides)`,
+      );
       setState("success");
     } catch (err) {
       console.error("Reduction processing failed:", err);
@@ -194,7 +187,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
       <PageHero
         eyebrow="PDF Reduction"
         title={tool.name}
-        description="Creates a reduced PDF ready for double-sided printing."
+        description="Reduce your PDF into 9, 12, or 16 pages per A4 side for double-sided printing."
       />
 
       {/* Main Workspace */}
@@ -206,8 +199,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
             <div>
               <strong>Printing instruction:</strong> After downloading, print normally using{" "}
               <span className="font-semibold text-primary">Both Sides / Duplex</span>. Do not use{" "}
-              <em>Pages per Sheet</em> in your printer dialog — the page reduction is already built
-              directly into the generated PDF.
+              <em>Pages per Sheet</em> in your printer dialog — the reduced grid layout is already
+              embedded directly into the generated PDF.
             </div>
           </div>
 
@@ -263,135 +256,215 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                 )}
               </div>
 
-              {/* Step 2 & 3: Display PDF Pages and Sheet Count Selection */}
+              {/* Step 2 & 3: Reduction Size Selection */}
               {pageCount !== null && pageCount > 0 && state !== "success" && (
                 <div className="border-t border-border pt-5 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        Number of sheets
+                        Reduction size (per A4 side)
                       </span>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Target physical double-sided sheets.
+                        Number of reduced page boxes placed on each physical side.
                       </p>
                     </div>
 
-                    {/* Sheet Count Selector Buttons: [ 9 ] [ 12 ] [ 16 ] */}
+                    {/* Selector Buttons: [ 9 per side ] [ 12 per side ] [ 16 per side ] */}
                     <div className="inline-flex items-center rounded-xl border border-border bg-surface p-1 shadow-xs">
-                      {([9, 12, 16] as const).map((count) => {
-                        const isSelected = sheetCount === count;
+                      {([9, 12, 16] as const).map((size) => {
+                        const isSelected = reductionSize === size;
                         return (
                           <button
-                            key={count}
+                            key={size}
                             type="button"
-                            onClick={() => setSheetCount(count)}
+                            onClick={() => setReductionSize(size)}
                             disabled={state === "loading"}
-                            className={`min-w-16 rounded-lg px-4 py-2 text-sm font-bold transition-all ${
+                            className={`rounded-lg px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
                               isSelected
                                 ? "bg-primary text-primary-foreground shadow-xs"
                                 : "text-muted-foreground hover:text-foreground"
                             }`}
                           >
-                            {count}
+                            {size} per side
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Step 4: Display Summary */}
+                  {/* Step 4: Dynamic Metrics Display */}
                   {plan && (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-bold text-foreground">
-                          {pageCount} pages → {plan.actualSheetCount} sheet
-                          {plan.actualSheetCount === 1 ? "" : "s"}
-                          {plan.actualSheetCount < sheetCount && (
-                            <span className="text-xs font-normal text-muted-foreground ml-1.5">
-                              (within {sheetCount} sheets max)
-                            </span>
-                          )}
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="rounded-lg bg-card/80 p-2.5 border border-border/60">
+                          <span className="text-[0.68rem] font-medium text-muted-foreground block">
+                            Pages per side
+                          </span>
+                          <span className="text-sm font-bold text-foreground">
+                            {plan.reductionSize} pages
+                          </span>
                         </div>
-                        <div className="text-xs text-muted-foreground">{distributionText}</div>
+                        <div className="rounded-lg bg-card/80 p-2.5 border border-border/60">
+                          <span className="text-[0.68rem] font-medium text-muted-foreground block">
+                            Capacity per sheet
+                          </span>
+                          <span className="text-sm font-bold text-foreground">
+                            {plan.pagesPerPhysicalSheet} pages
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-card/80 p-2.5 border border-border/60">
+                          <span className="text-[0.68rem] font-medium text-muted-foreground block">
+                            Physical sheets
+                          </span>
+                          <span className="text-sm font-bold text-foreground text-primary">
+                            {plan.physicalSheetCount} sheet
+                            {plan.physicalSheetCount === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-card/80 p-2.5 border border-border/60">
+                          <span className="text-[0.68rem] font-medium text-muted-foreground block">
+                            Output PDF pages
+                          </span>
+                          <span className="text-sm font-bold text-foreground text-primary">
+                            {plan.outputPdfPageCount} pages (Duplex)
+                          </span>
+                        </div>
                       </div>
-                      <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                        <Layers className="h-3.5 w-3.5" />
-                        {plan.totalPrintableSides} printable sides (Duplex)
+
+                      <div className="text-[0.75rem] text-muted-foreground pt-1 flex items-center justify-between">
+                        <span>
+                          {pageCount} source pages require{" "}
+                          <strong>
+                            {plan.physicalSheetCount} physical A4 sheet
+                            {plan.physicalSheetCount === 1 ? "" : "s"}
+                          </strong>{" "}
+                          ({plan.outputPdfPageCount} printable sides).
+                        </span>
+                        <span className="hidden sm:inline-flex items-center gap-1 font-semibold text-primary">
+                          <Layers className="h-3 w-3" /> Double-sided ready
+                        </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Step 5: Simple Visual Preview */}
+                  {/* Step 5: Visual Reduced A4 Layout Preview */}
                   {plan && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Physical Sheet Layout Preview
+                          A4 Reduced Layout Preview
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {plan.sheets.length} physical sheet
-                          {plan.sheets.length === 1 ? "" : "s"} total
+                          {plan.physicalSheetCount} physical sheet
+                          {plan.physicalSheetCount === 1 ? "" : "s"} total
                         </span>
                       </div>
 
-                      <div className="max-h-80 overflow-y-auto rounded-xl border border-border bg-surface/50 p-3 space-y-2.5">
-                        {plan.sheets.map((s) => (
+                      <div className="max-h-96 overflow-y-auto rounded-xl border border-border bg-surface/50 p-3 space-y-4">
+                        {plan.sheets.map((sheet) => (
                           <div
-                            key={s.sheetNumber}
-                            className="rounded-lg border border-border bg-card p-3 shadow-2xs space-y-2"
+                            key={sheet.sheetNumber}
+                            className="rounded-xl border border-border bg-card p-3.5 shadow-2xs space-y-3"
                           >
                             <div className="flex items-center justify-between text-xs font-bold text-foreground">
-                              <span>Sheet {s.sheetNumber}</span>
+                              <span>
+                                Physical Sheet {sheet.sheetNumber} of {plan.physicalSheetCount}
+                              </span>
                               <span className="text-[0.7rem] font-normal text-muted-foreground">
-                                {s.frontPages.length + s.backPages.length} source page
-                                {s.frontPages.length + s.backPages.length === 1 ? "" : "s"}
+                                Front & Back Duplex Pair
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                              {/* FRONT SIDE */}
-                              <div className="rounded-md border border-border/70 bg-surface p-2 space-y-1.5">
-                                <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
-                                  FRONT (Output Page {s.sheetNumber * 2 - 1})
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {s.frontPages.length > 0 ? (
-                                    s.frontPages.map((p) => (
-                                      <span
-                                        key={p}
-                                        className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary border border-primary/20"
-                                      >
-                                        Page {p}
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span className="text-xs italic text-muted-foreground">
-                                      Blank side
-                                    </span>
-                                  )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                              {/* FRONT A4 SIDE */}
+                              <div className="rounded-lg border border-border/80 bg-surface/90 p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[0.7rem] font-bold uppercase tracking-wider text-primary">
+                                    FRONT (Output Page {sheet.sheetNumber * 2 - 1})
+                                  </span>
+                                  <span className="text-[0.65rem] text-muted-foreground">
+                                    Odd pages
+                                  </span>
+                                </div>
+
+                                <div
+                                  className={`grid gap-1.5 ${
+                                    reductionSize === 9
+                                      ? "grid-cols-3"
+                                      : reductionSize === 12
+                                        ? "grid-cols-4"
+                                        : "grid-cols-4"
+                                  }`}
+                                >
+                                  {sheet.front.boxes.map((p, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`h-12 rounded border flex flex-col items-center justify-center p-1 text-center transition-colors ${
+                                        p !== null
+                                          ? "border-primary/30 bg-primary/10 text-primary font-bold shadow-2xs"
+                                          : "border-dashed border-border/80 bg-surface/40 text-muted-foreground/60 text-[0.65rem]"
+                                      }`}
+                                    >
+                                      {p !== null ? (
+                                        <>
+                                          <span className="text-[0.62rem] font-normal text-muted-foreground leading-none">
+                                            Pg
+                                          </span>
+                                          <span className="text-xs font-bold leading-tight">
+                                            {p}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="italic">Blank</span>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
 
-                              {/* BACK SIDE */}
-                              <div className="rounded-md border border-border/70 bg-surface p-2 space-y-1.5">
-                                <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
-                                  BACK (Output Page {s.sheetNumber * 2})
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {s.backPages.length > 0 ? (
-                                    s.backPages.map((p) => (
-                                      <span
-                                        key={p}
-                                        className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground border border-border"
-                                      >
-                                        Page {p}
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span className="text-xs italic text-muted-foreground">
-                                      Blank side
-                                    </span>
-                                  )}
+                              {/* BACK A4 SIDE */}
+                              <div className="rounded-lg border border-border/80 bg-surface/90 p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[0.7rem] font-bold uppercase tracking-wider text-secondary-foreground">
+                                    BACK (Output Page {sheet.sheetNumber * 2})
+                                  </span>
+                                  <span className="text-[0.65rem] text-muted-foreground">
+                                    Even pages (Reverse)
+                                  </span>
+                                </div>
+
+                                <div
+                                  className={`grid gap-1.5 ${
+                                    reductionSize === 9
+                                      ? "grid-cols-3"
+                                      : reductionSize === 12
+                                        ? "grid-cols-4"
+                                        : "grid-cols-4"
+                                  }`}
+                                >
+                                  {sheet.back.boxes.map((p, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`h-12 rounded border flex flex-col items-center justify-center p-1 text-center transition-colors ${
+                                        p !== null
+                                          ? "border-secondary-foreground/20 bg-secondary text-secondary-foreground font-bold shadow-2xs"
+                                          : "border-dashed border-border/80 bg-surface/40 text-muted-foreground/60 text-[0.65rem]"
+                                      }`}
+                                    >
+                                      {p !== null ? (
+                                        <>
+                                          <span className="text-[0.62rem] font-normal text-muted-foreground leading-none">
+                                            Pg
+                                          </span>
+                                          <span className="text-xs font-bold leading-tight">
+                                            {p}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="italic">Blank</span>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             </div>
@@ -413,8 +486,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                       Create Reduced PDF
                     </button>
                     <p className="text-xs text-muted-foreground">
-                      Creates a reduced PDF with native vector quality. Ready for Both Sides / Duplex
-                      printing.
+                      Generates a {plan?.outputPdfPageCount}-page PDF with native vector quality,
+                      ready for Both Sides / Duplex printing.
                     </p>
                   </div>
                 </div>
@@ -448,7 +521,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                 <h3 className="text-xl font-bold text-foreground">Reduction complete</h3>
                 <p className="text-sm text-muted-foreground">
                   {successDetail ??
-                    `${pageCount} pages arranged across ${plan?.actualSheetCount} sheets`}
+                    `${pageCount} pages reduced into ${plan?.physicalSheetCount} physical sheets`}
                 </p>
               </div>
 
@@ -457,8 +530,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                 <Info className="h-4 w-4 text-primary shrink-0" />
                 <span>
                   <strong>Print Instruction:</strong> After downloading, print normally using{" "}
-                  <strong>Both Sides / Duplex</strong>. Do not use <em>Pages per Sheet</em> in your
-                  printer dialog.
+                  <strong>Both Sides / Duplex (Flip on Long Edge)</strong>. Do not use{" "}
+                  <em>Pages per Sheet</em> in your printer dialog.
                 </span>
               </div>
 

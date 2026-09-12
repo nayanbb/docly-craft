@@ -3,6 +3,9 @@ import {
   calculateReductionPlan,
   createReducedPdf,
   validateReducedPdf,
+  type ReductionSize,
+  A4_WIDTH,
+  A4_HEIGHT,
 } from "./src/lib/pdf/reduction-maker";
 
 /**
@@ -13,7 +16,7 @@ async function generateSamplePdf(pageCount: number): Promise<Uint8Array> {
   const font = await doc.embedFont(StandardFonts.HelveticaBold);
 
   for (let i = 1; i <= pageCount; i++) {
-    const page = doc.addPage([595.28, 841.89]); // Standard A4
+    const page = doc.addPage([A4_WIDTH, A4_HEIGHT]);
     page.drawText(`Page ${i}`, {
       x: 60,
       y: 760,
@@ -43,91 +46,144 @@ async function generateSamplePdf(pageCount: number): Promise<Uint8Array> {
 
 interface TestCase {
   pages: number;
-  sheets: 9 | 12 | 16;
+  size: ReductionSize;
 }
 
-const REQUIRED_TEST_CASES: TestCase[] = [
-  { pages: 18, sheets: 9 },
-  { pages: 36, sheets: 9 },
-  { pages: 36, sheets: 12 },
-  { pages: 36, sheets: 16 },
-  { pages: 20, sheets: 9 },
-  { pages: 20, sheets: 12 },
-  { pages: 20, sheets: 16 },
-  { pages: 5, sheets: 9 },
-  { pages: 1, sheets: 9 },
-  { pages: 32, sheets: 16 },
-  { pages: 48, sheets: 12 },
-  { pages: 72, sheets: 9 },
+const MANDATORY_TEST_CASES: TestCase[] = [
+  // 9 per side
+  { pages: 18, size: 9 },
+  { pages: 36, size: 9 },
+  { pages: 72, size: 9 },
+  // 12 per side
+  { pages: 24, size: 12 },
+  { pages: 48, size: 12 },
+  { pages: 96, size: 12 },
+  // 16 per side
+  { pages: 32, size: 16 },
+  { pages: 64, size: 16 },
+  { pages: 128, size: 16 },
+  // Edge cases & uneven sheets
+  { pages: 1, size: 9 },
+  { pages: 5, size: 9 },
+  { pages: 20, size: 9 },
+  { pages: 10, size: 12 },
+  { pages: 25, size: 12 },
+  { pages: 36, size: 12 },
+  { pages: 33, size: 16 },
+  { pages: 36, size: 16 },
+  { pages: 50, size: 16 },
 ];
 
 async function runTestSuite() {
   console.log("===============================================================================");
-  console.log("REDUCTION MAKER — VERIFIED DUPLEX PRINT LOGIC TEST SUITE");
+  console.log("REDUCTION MAKER — FINAL VERIFIED N-UP DUPLEX PRINT LOGIC TEST SUITE");
   console.log("===============================================================================\n");
 
   let passedCount = 0;
 
-  for (const tc of REQUIRED_TEST_CASES) {
-    const { pages, sheets } = tc;
+  for (const tc of MANDATORY_TEST_CASES) {
+    const { pages, size } = tc;
 
     // 1. Calculate reduction plan
-    const plan = calculateReductionPlan(pages, sheets);
+    const plan = calculateReductionPlan(pages, size);
+    const capacityPerSheet = size * 2;
+    const expectedSheets = Math.ceil(pages / capacityPerSheet);
+    const expectedOutputPages = expectedSheets * 2;
 
-    // 2. Verify all source pages appear exactly once in sequential order
-    const collectedPages: number[] = [];
-    let blankSides = 0;
-
-    for (const s of plan.sheets) {
-      if (s.frontPages.length === 0) blankSides++;
-      if (s.backPages.length === 0) blankSides++;
-      collectedPages.push(...s.frontPages);
-      collectedPages.push(...s.backPages);
-    }
-
-    // Check count
-    if (collectedPages.length !== pages) {
-      throw new Error(`Total collected pages (${collectedPages.length}) !== input pages (${pages})`);
-    }
-
-    // Check sequential & no duplicates
-    for (let i = 0; i < pages; i++) {
-      if (collectedPages[i] !== i + 1) {
-        throw new Error(
-          `Sequential order violated! At index ${i}, expected Page ${i + 1}, but got Page ${collectedPages[i]}`,
-        );
-      }
-    }
-
-    // Check no unnecessary blank pages:
-    // When pages >= sheets * 2: blankSides must be 0
-    // When pages < sheets * 2: blankSides is at most (pages % 2 === 1 ? 1 : 0)
-    const maxExpectedBlankSides = pages >= sheets * 2 ? 0 : pages % 2 === 1 ? 1 : 0;
-    if (blankSides > maxExpectedBlankSides) {
+    if (plan.physicalSheetCount !== expectedSheets) {
       throw new Error(
-        `Unnecessary blank sides detected! Found ${blankSides}, expected at most ${maxExpectedBlankSides}`,
+        `Physical sheet mismatch for P=${pages}, N=${size}: got ${plan.physicalSheetCount}, expected ${expectedSheets}`,
       );
+    }
+    if (plan.outputPdfPageCount !== expectedOutputPages) {
+      throw new Error(
+        `Output page mismatch for P=${pages}, N=${size}: got ${plan.outputPdfPageCount}, expected ${expectedOutputPages}`,
+      );
+    }
+
+    // 2. Verify all source pages appear exactly once in correct front/back odd/even positions
+    const seenPages = new Set<number>();
+    let blankBoxes = 0;
+
+    plan.sheets.forEach((sheet, sIdx) => {
+      const sheetStart = sIdx * capacityPerSheet;
+
+      // Front boxes
+      sheet.front.boxes.forEach((p, bIdx) => {
+        const expectedP = sheetStart + 1 + bIdx * 2;
+        if (p !== null) {
+          if (p !== expectedP) {
+            throw new Error(`Front box mismatch: at sheet ${sIdx + 1} box ${bIdx}, got ${p}, expected ${expectedP}`);
+          }
+          if (seenPages.has(p)) {
+            throw new Error(`Duplicate page detected: ${p}`);
+          }
+          seenPages.add(p);
+        } else {
+          // Expected to be null only if expectedP > pages
+          if (expectedP <= pages) {
+            throw new Error(`Missing page! Page ${expectedP} should be in sheet ${sIdx + 1} front box ${bIdx}`);
+          }
+          blankBoxes++;
+        }
+      });
+
+      // Back boxes
+      sheet.back.boxes.forEach((p, bIdx) => {
+        const expectedP = sheetStart + 2 + bIdx * 2;
+        if (p !== null) {
+          if (p !== expectedP) {
+            throw new Error(`Back box mismatch: at sheet ${sIdx + 1} box ${bIdx}, got ${p}, expected ${expectedP}`);
+          }
+          if (seenPages.has(p)) {
+            throw new Error(`Duplicate page detected: ${p}`);
+          }
+          seenPages.add(p);
+        } else {
+          // Expected to be null only if expectedP > pages
+          if (expectedP <= pages) {
+            throw new Error(`Missing page! Page ${expectedP} should be in sheet ${sIdx + 1} back box ${bIdx}`);
+          }
+          blankBoxes++;
+        }
+      });
+    });
+
+    // Check all pages 1..pages accounted for
+    if (seenPages.size !== pages) {
+      throw new Error(`Accounted pages count (${seenPages.size}) !== input pages (${pages})`);
     }
 
     // 3. Generate REAL PDF via createReducedPdf
     const sampleBytes = await generateSamplePdf(pages);
-    const result = await createReducedPdf(sampleBytes.buffer as ArrayBuffer, sheets);
+    const result = await createReducedPdf(sampleBytes.buffer as ArrayBuffer, size);
+
+    if (result.outputPageCount !== expectedOutputPages) {
+      throw new Error(`Result output page count (${result.outputPageCount}) !== expected (${expectedOutputPages})`);
+    }
 
     // 4. Verify generated PDF structure
     const outputBuffer = await result.blob.arrayBuffer();
     const loadedDoc = await PDFDocument.load(outputBuffer);
     const actualOutputPages = loadedDoc.getPageCount();
 
-    if (actualOutputPages !== plan.totalPrintableSides) {
-      throw new Error(
-        `Output page mismatch! Expected ${plan.totalPrintableSides}, got ${actualOutputPages}`,
-      );
+    if (actualOutputPages !== expectedOutputPages) {
+      throw new Error(`Reloaded PDF has ${actualOutputPages} pages, expected ${expectedOutputPages}`);
+    }
+
+    // Verify A4 dimensions on all generated pages
+    for (let pIdx = 0; pIdx < actualOutputPages; pIdx++) {
+      const p = loadedDoc.getPage(pIdx);
+      const { width, height } = p.getSize();
+      if (Math.abs(width - A4_WIDTH) > 0.01 || Math.abs(height - A4_HEIGHT) > 0.01) {
+        throw new Error(`Page ${pIdx + 1} has dimensions ${width}x${height}, expected A4 (${A4_WIDTH}x${A4_HEIGHT})`);
+      }
     }
 
     // 5. Verify through validateReducedPdf
     const valResult = await validateReducedPdf(
       new Uint8Array(outputBuffer),
-      plan.actualSheetCount,
+      plan.physicalSheetCount,
       pages,
     );
     if (!valResult.valid) {
@@ -135,22 +191,20 @@ async function runTestSuite() {
     }
 
     // 6. Summary printout
-    console.log(`[TEST] ${pages} source pages → Target: ${sheets} sheets:`);
-    console.log(`   • Output PDF pages (sides): ${actualOutputPages}`);
-    console.log(`   • Physical sheets used: ${plan.actualSheetCount}`);
-    console.log(
-      `   • Pages per printable side: ${plan.minPagesPerSide === plan.maxPagesPerSide ? plan.minPagesPerSide : `${plan.minPagesPerSide}–${plan.maxPagesPerSide}`}`,
-    );
-    console.log(`   • Blank sides: ${blankSides} (unavoidable: ${maxExpectedBlankSides})`);
-    console.log(`   • Duplex order: Sheet 1 (F: ${plan.sheets[0]?.frontPages.join(", ") || "blank"}, B: ${plan.sheets[0]?.backPages.join(", ") || "blank"}) ...`);
-    console.log(`   • PDF validity: %PDF header verified, ${outputBuffer.byteLength} bytes`);
+    console.log(`[TEST] ${pages} source pages | ${size} per side:`);
+    console.log(`   • Physical sheets required: ${plan.physicalSheetCount}`);
+    console.log(`   • Output PDF pages: ${actualOutputPages} (Duplex pairs: ${actualOutputPages / 2})`);
+    console.log(`   • Blank grid boxes: ${blankBoxes}`);
+    console.log(`   • Sheet 1 Front: [${plan.sheets[0]?.front.boxes.filter(Boolean).join(", ")}]`);
+    console.log(`   • Sheet 1 Back:  [${plan.sheets[0]?.back.boxes.filter(Boolean).join(", ")}]`);
+    console.log(`   • PDF valid & verified: ${outputBuffer.byteLength} bytes`);
     console.log(`   ✓ PASS\n`);
 
     passedCount++;
   }
 
   console.log("===============================================================================");
-  console.log(`SUMMARY: ALL ${passedCount} / ${REQUIRED_TEST_CASES.length} TEST CASES PASSED SUCCESSFULLY!`);
+  console.log(`SUMMARY: ALL ${passedCount} / ${MANDATORY_TEST_CASES.length} TEST CASES PASSED SUCCESSFULLY!`);
   console.log("===============================================================================");
 }
 
