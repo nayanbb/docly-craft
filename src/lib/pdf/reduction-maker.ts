@@ -8,11 +8,12 @@ export interface SheetLayout {
 
 export interface ReductionPlanSummary {
   totalPdfPages: number;
-  sheetCount: number;
-  basePages: number;
-  remainder: number;
-  minPagesPerSheet: number;
-  maxPagesPerSheet: number;
+  selectedSheetCount: number;
+  actualSheetCount: number;
+  totalPrintableSides: number;
+  minPagesPerSide: number;
+  maxPagesPerSide: number;
+  blankSidesCount: number;
   sheets: SheetLayout[];
 }
 
@@ -20,70 +21,112 @@ export const A4_WIDTH = 595.28;
 export const A4_HEIGHT = 841.89;
 
 /**
- * Calculates the dynamic page distribution across the selected physical sheets.
- * Follows the balanced distribution formula:
- *   basePages = floor(P / S)
- *   remainder = P % S
- * First remainder sheets receive basePages + 1 pages.
- * Remaining sheets receive basePages pages.
+ * Calculates the dynamic page distribution across printable sides for duplex printing.
  *
- * Each sheet is then split into FRONT (ceil(k/2)) and BACK (floor(k/2)).
+ * Duplex Geometry:
+ * S = selected physical sheet count
+ * T_max = 2 * S (maximum printable sides across S sheets)
+ *
+ * - When P >= T_max:
+ *   Distribute P pages sequentially across all T_max sides.
+ *   Each side receives floor(P / T_max) or ceil(P / T_max) original pages.
+ *   Zero blank sides are created.
+ *
+ * - When P < T_max:
+ *   The document fits within S sheets using 1 original page per side.
+ *   actualSheets = ceil(P / 2) <= S.
+ *   actualSides = actualSheets * 2.
+ *   Sides 1..P receive original pages 1..P.
+ *   If P is odd, the back of the final sheet is a single blank side (mathematically unavoidable).
+ *   No unnecessary blank sheets are added merely to reach an arbitrary 2*S count.
  */
 export function calculateReductionPlan(
   totalPdfPages: number,
-  sheetCount: number,
+  selectedSheetCount: number,
 ): ReductionPlanSummary {
-  if (sheetCount <= 0) {
+  if (selectedSheetCount <= 0) {
     throw new Error("Number of physical sheets must be positive.");
   }
   if (totalPdfPages <= 0) {
     throw new Error("PDF page count must be positive.");
   }
 
-  const basePages = Math.floor(totalPdfPages / sheetCount);
-  const remainder = totalPdfPages % sheetCount;
+  const maxSides = selectedSheetCount * 2;
 
-  const sheets: SheetLayout[] = [];
+  // Determine actual printable sides needed:
+  // If totalPdfPages >= maxSides: we use all maxSides (selectedSheetCount physical sheets).
+  // If totalPdfPages < maxSides: we only produce the physical sheets needed to print totalPdfPages
+  // at 1 page per side (ceil(P / 2) sheets), avoiding unwanted blank sheets at the printer.
+  const actualSides =
+    totalPdfPages >= maxSides ? maxSides : Math.ceil(totalPdfPages / 2) * 2;
+
+  const actualSheetCount = actualSides / 2;
+
+  const basePagesPerSide = Math.floor(totalPdfPages / actualSides);
+  const remainderSides = totalPdfPages % actualSides;
+
+  const sidesPages: number[][] = [];
   let currentPage = 1;
 
-  for (let s = 1; s <= sheetCount; s++) {
-    const pageCountForSheet = s <= remainder ? basePages + 1 : basePages;
-    const sheetPages: number[] = [];
+  for (let side = 0; side < actualSides; side++) {
+    const pagesForThisSide =
+      totalPdfPages >= actualSides
+        ? side < remainderSides
+          ? basePagesPerSide + 1
+          : basePagesPerSide
+        : currentPage <= totalPdfPages
+          ? 1
+          : 0;
 
-    for (let p = 0; p < pageCountForSheet; p++) {
+    const pageList: number[] = [];
+    for (let p = 0; p < pagesForThisSide; p++) {
       if (currentPage <= totalPdfPages) {
-        sheetPages.push(currentPage++);
+        pageList.push(currentPage++);
       }
     }
+    sidesPages.push(pageList);
+  }
 
-    const frontCount = Math.ceil(sheetPages.length / 2);
-    const frontPages = sheetPages.slice(0, frontCount);
-    const backPages = sheetPages.slice(frontCount);
+  const sheets: SheetLayout[] = [];
+  let blankSidesCount = 0;
+
+  for (let s = 0; s < actualSheetCount; s++) {
+    const frontPages = sidesPages[s * 2] ?? [];
+    const backPages = sidesPages[s * 2 + 1] ?? [];
+    if (frontPages.length === 0) blankSidesCount++;
+    if (backPages.length === 0) blankSidesCount++;
 
     sheets.push({
-      sheetNumber: s,
+      sheetNumber: s + 1,
       frontPages,
       backPages,
     });
   }
 
-  const minPagesPerSheet = basePages;
-  const maxPagesPerSheet = remainder > 0 ? basePages + 1 : basePages;
+  const contentSideCounts = sidesPages
+    .map((s) => s.length)
+    .filter((len) => len > 0);
+
+  const minPagesPerSide =
+    contentSideCounts.length > 0 ? Math.min(...contentSideCounts) : 0;
+  const maxPagesPerSide =
+    contentSideCounts.length > 0 ? Math.max(...contentSideCounts) : 0;
 
   return {
     totalPdfPages,
-    sheetCount,
-    basePages,
-    remainder,
-    minPagesPerSheet,
-    maxPagesPerSheet,
+    selectedSheetCount,
+    actualSheetCount,
+    totalPrintableSides: actualSides,
+    minPagesPerSide,
+    maxPagesPerSide,
+    blankSidesCount,
     sheets,
   };
 }
 
 /**
  * Automatically chooses an optimal grid (columns x rows) for placing
- * the given count of pages on a single physical side.
+ * N original PDF pages on a single physical side.
  */
 export function getGridForCount(
   count: number,
@@ -136,14 +179,15 @@ export interface ReductionResult {
 }
 
 /**
- * Creates a reduced PDF arranging all original pages across the selected physical sheets
- * for double-sided (duplex) printing.
+ * Creates the final reduced PDF ready for double-sided printing.
  *
  * Physical Front/Back ordering:
  * Sheet 1: Output Page 1 (Front), Output Page 2 (Back)
  * Sheet 2: Output Page 3 (Front), Output Page 4 (Back)
  * ...
  * Sheet S: Output Page 2S-1 (Front), Output Page 2S (Back)
+ *
+ * The user prints using standard "Both sides / Duplex" without any "Pages per sheet" reduction.
  */
 export async function createReducedPdf(
   file: File | ArrayBuffer,
@@ -186,9 +230,10 @@ export async function createReducedPdf(
 
   const margin = 18;
   const gap = 8;
-  const stepPerSheet = 45 / sheetCount;
+  const totalSheetsToRender = plan.sheets.length;
+  const stepPerSheet = 45 / totalSheetsToRender;
 
-  for (let s = 0; s < plan.sheets.length; s++) {
+  for (let s = 0; s < totalSheetsToRender; s++) {
     const sheet = plan.sheets[s]!;
 
     // 1. FRONT SIDE (Odd output page)
@@ -207,7 +252,7 @@ export async function createReducedPdf(
   const pdfBytes = await destDoc.save();
 
   // Internal validation check before returning
-  await validateReducedPdf(pdfBytes, sheetCount, totalPdfPages);
+  await validateReducedPdf(pdfBytes, plan.actualSheetCount, totalPdfPages);
 
   onProgress?.(100);
 
@@ -216,14 +261,14 @@ export async function createReducedPdf(
   return {
     blob,
     totalPdfPages,
-    sheetCount,
-    outputPageCount: sheetCount * 2,
+    sheetCount: plan.actualSheetCount,
+    outputPageCount: plan.totalPrintableSides,
   };
 }
 
 /**
  * Validates that the generated PDF conforms to all requirements:
- * - Output page count is exactly 2 * sheetCount
+ * - Output page count is exactly 2 * actualSheetCount
  * - Output PDF loads successfully and is valid
  */
 export async function validateReducedPdf(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   FileText,
@@ -7,9 +7,10 @@ import {
   CheckCircle2,
   ChevronRight,
   Layers,
-  Sparkles,
+  Printer,
   Loader2,
   X,
+  Info,
 } from "lucide-react";
 import type { Tool } from "@/lib/tools";
 import { PageHero } from "@/components/layout/PageHero";
@@ -17,7 +18,6 @@ import { FileUploader } from "@/components/files/FileUploader";
 import {
   ErrorMessage,
   ProgressIndicator,
-  SuccessMessage,
   type ToolState,
 } from "@/components/files/ToolStates";
 import { downloadValidatedBlob } from "@/lib/files/download";
@@ -95,17 +95,20 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
     }
   }, [pageCount, sheetCount]);
 
-  // Text representation of the reduction ratio
+  // User-facing distribution description
   const distributionText = useMemo(() => {
     if (!plan) return "";
-    if (plan.minPagesPerSheet === plan.maxPagesPerSheet) {
-      return `${plan.minPagesPerSheet} page${plan.minPagesPerSheet === 1 ? "" : "s"} per sheet`;
+    if (plan.totalPdfPages < plan.selectedSheetCount * 2) {
+      return `1 original page per printable side (fits comfortably in ${plan.actualSheetCount} sheets)`;
     }
-    return `${plan.minPagesPerSheet}–${plan.maxPagesPerSheet} pages per sheet`;
+    if (plan.minPagesPerSide === plan.maxPagesPerSide) {
+      return `${plan.minPagesPerSide} original page${plan.minPagesPerSide === 1 ? "" : "s"} per printable side`;
+    }
+    return `${plan.minPagesPerSide}–${plan.maxPagesPerSide} original pages per printable side`;
   }, [plan]);
 
   const handleProcess = async () => {
-    if (!file || !pageCount) return;
+    if (!file || !pageCount || !plan) return;
     if (state === "loading" || isProcessingRef.current) return;
     isProcessingRef.current = true;
 
@@ -113,7 +116,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
     setErrorDetail(null);
     setSuccessDetail(null);
     setProgress(5);
-    setProgressLabel("Analyzing and preparing layout...");
+    setProgressLabel("Analyzing document and preparing duplex layout...");
 
     try {
       const result = await createReducedPdf(file, sheetCount, (pct) => {
@@ -129,8 +132,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
 
       setDownloadBlobData(result.blob);
       const baseName = file.name.replace(/\.[^/.]+$/, "");
-      setDownloadName(`${baseName}-reduced-${sheetCount}sheets.pdf`);
-      setSuccessDetail(`${result.totalPdfPages} pages arranged across ${sheetCount} sheets`);
+      setDownloadName(`${baseName}-reduced-${result.sheetCount}sheets.pdf`);
+      setSuccessDetail(`${result.totalPdfPages} pages arranged across ${result.sheetCount} sheets`);
       setState("success");
     } catch (err) {
       console.error("Reduction processing failed:", err);
@@ -191,12 +194,23 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
       <PageHero
         eyebrow="PDF Reduction"
         title={tool.name}
-        description={tool.description}
+        description="Creates a reduced PDF ready for double-sided printing."
       />
 
       {/* Main Workspace */}
       <div className="container-page py-10">
         <div className="mx-auto max-w-4xl space-y-8">
+          {/* Important Print Instruction Notice */}
+          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-foreground">
+            <Printer className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <strong>Printing instruction:</strong> After downloading, print normally using{" "}
+              <span className="font-semibold text-primary">Both Sides / Duplex</span>. Do not use{" "}
+              <em>Pages per Sheet</em> in your printer dialog — the page reduction is already built
+              directly into the generated PDF.
+            </div>
+          </div>
+
           {/* Uploader (shown when no file selected) */}
           {!file && (
             <div className="space-y-4">
@@ -258,7 +272,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                         Number of sheets
                       </span>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Choose how many physical double-sided sheets to reduce into.
+                        Target physical double-sided sheets.
                       </p>
                     </div>
 
@@ -285,19 +299,27 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                     </div>
                   </div>
 
-                  {/* Step 4: Display "36 pages → 9 sheets" and "4 pages per sheet" */}
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <div className="text-sm font-bold text-foreground">
-                        {pageCount} pages → {sheetCount} sheets
+                  {/* Step 4: Display Summary */}
+                  {plan && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-bold text-foreground">
+                          {pageCount} pages → {plan.actualSheetCount} sheet
+                          {plan.actualSheetCount === 1 ? "" : "s"}
+                          {plan.actualSheetCount < sheetCount && (
+                            <span className="text-xs font-normal text-muted-foreground ml-1.5">
+                              (within {sheetCount} sheets max)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{distributionText}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{distributionText}</div>
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                        <Layers className="h-3.5 w-3.5" />
+                        {plan.totalPrintableSides} printable sides (Duplex)
+                      </div>
                     </div>
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                      <Layers className="h-3.5 w-3.5" />
-                      {sheetCount * 2} printable sides (Duplex)
-                    </div>
-                  </div>
+                  )}
 
                   {/* Step 5: Simple Visual Preview */}
                   {plan && (
@@ -307,7 +329,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                           Physical Sheet Layout Preview
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {plan.sheets.length} sheets total
+                          {plan.sheets.length} physical sheet
+                          {plan.sheets.length === 1 ? "" : "s"} total
                         </span>
                       </div>
 
@@ -329,7 +352,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                               {/* FRONT SIDE */}
                               <div className="rounded-md border border-border/70 bg-surface p-2 space-y-1.5">
                                 <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
-                                  FRONT
+                                  FRONT (Output Page {s.sheetNumber * 2 - 1})
                                 </span>
                                 <div className="flex flex-wrap gap-1.5">
                                   {s.frontPages.length > 0 ? (
@@ -352,7 +375,7 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                               {/* BACK SIDE */}
                               <div className="rounded-md border border-border/70 bg-surface p-2 space-y-1.5">
                                 <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
-                                  BACK
+                                  BACK (Output Page {s.sheetNumber * 2})
                                 </span>
                                 <div className="flex flex-wrap gap-1.5">
                                   {s.backPages.length > 0 ? (
@@ -390,7 +413,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                       Create Reduced PDF
                     </button>
                     <p className="text-xs text-muted-foreground">
-                      Double-sided A4 layout will be created client-side with native vector quality.
+                      Creates a reduced PDF with native vector quality. Ready for Both Sides / Duplex
+                      printing.
                     </p>
                   </div>
                 </div>
@@ -423,8 +447,19 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
               <div className="space-y-1">
                 <h3 className="text-xl font-bold text-foreground">Reduction complete</h3>
                 <p className="text-sm text-muted-foreground">
-                  {successDetail ?? `${pageCount} pages arranged across ${sheetCount} sheets`}
+                  {successDetail ??
+                    `${pageCount} pages arranged across ${plan?.actualSheetCount} sheets`}
                 </p>
+              </div>
+
+              {/* Crucial Duplex Print Instruction */}
+              <div className="max-w-lg mx-auto rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-foreground text-left flex items-center gap-2.5">
+                <Info className="h-4 w-4 text-primary shrink-0" />
+                <span>
+                  <strong>Print Instruction:</strong> After downloading, print normally using{" "}
+                  <strong>Both Sides / Duplex</strong>. Do not use <em>Pages per Sheet</em> in your
+                  printer dialog.
+                </span>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -446,10 +481,6 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
                   Reduce Another PDF
                 </button>
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                Ready for standard double-sided printing. Front and back sides alternate sequentially.
-              </p>
             </div>
           )}
         </div>

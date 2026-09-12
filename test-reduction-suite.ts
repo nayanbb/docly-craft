@@ -2,40 +2,39 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import {
   calculateReductionPlan,
   createReducedPdf,
-  getGridForCount,
   validateReducedPdf,
 } from "./src/lib/pdf/reduction-maker";
 
 /**
- * Creates an in-memory sample PDF with N distinct pages.
+ * Creates an in-memory test PDF with P distinct pages.
  */
 async function generateSamplePdf(pageCount: number): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.HelveticaBold);
 
   for (let i = 1; i <= pageCount; i++) {
-    const page = doc.addPage([595.28, 841.89]); // A4
-    page.drawText(`Document Page ${i} of ${pageCount}`, {
+    const page = doc.addPage([595.28, 841.89]); // Standard A4
+    page.drawText(`Page ${i}`, {
       x: 60,
       y: 760,
-      size: 22,
+      size: 24,
       font,
-      color: rgb(0.12, 0.25, 0.55),
+      color: rgb(0.1, 0.25, 0.6),
     });
     page.drawRectangle({
-      x: 40,
-      y: 40,
-      width: 515.28,
-      height: 761.89,
-      borderColor: rgb(0.75, 0.75, 0.8),
-      borderWidth: 1.5,
+      x: 30,
+      y: 30,
+      width: 535.28,
+      height: 781.89,
+      borderColor: rgb(0.8, 0.8, 0.85),
+      borderWidth: 1,
     });
-    page.drawText(`Content identifier: P#${i}`, {
+    page.drawText(`Original Content Body for Page ${i}`, {
       x: 60,
-      y: 700,
+      y: 710,
       size: 14,
       font,
-      color: rgb(0.3, 0.3, 0.3),
+      color: rgb(0.25, 0.25, 0.25),
     });
   }
 
@@ -63,87 +62,99 @@ const REQUIRED_TEST_CASES: TestCase[] = [
 ];
 
 async function runTestSuite() {
-  console.log("=================================================");
-  console.log("REDUCTION MAKER COMPREHENSIVE TEST SUITE");
-  console.log("=================================================\n");
+  console.log("===============================================================================");
+  console.log("REDUCTION MAKER — VERIFIED DUPLEX PRINT LOGIC TEST SUITE");
+  console.log("===============================================================================\n");
 
   let passedCount = 0;
 
   for (const tc of REQUIRED_TEST_CASES) {
     const { pages, sheets } = tc;
-    process.stdout.write(`Testing ${pages} pages → ${sheets} sheets: `);
 
-    // 1. Verify Algorithmic Distribution Plan
+    // 1. Calculate reduction plan
     const plan = calculateReductionPlan(pages, sheets);
-    if (plan.sheets.length !== sheets) {
-      throw new Error(`Plan generated ${plan.sheets.length} sheets, expected ${sheets}`);
-    }
 
-    // Verify all pages are uniquely present from 1 to `pages`
+    // 2. Verify all source pages appear exactly once in sequential order
     const collectedPages: number[] = [];
     let blankSides = 0;
-    for (const sheet of plan.sheets) {
-      if (sheet.frontPages.length === 0) blankSides++;
-      if (sheet.backPages.length === 0) blankSides++;
-      collectedPages.push(...sheet.frontPages);
-      collectedPages.push(...sheet.backPages);
+
+    for (const s of plan.sheets) {
+      if (s.frontPages.length === 0) blankSides++;
+      if (s.backPages.length === 0) blankSides++;
+      collectedPages.push(...s.frontPages);
+      collectedPages.push(...s.backPages);
     }
 
+    // Check count
     if (collectedPages.length !== pages) {
-      throw new Error(`Total pages collected (${collectedPages.length}) !== input pages (${pages})`);
+      throw new Error(`Total collected pages (${collectedPages.length}) !== input pages (${pages})`);
     }
 
-    const sortedPages = [...collectedPages].sort((a, b) => a - b);
+    // Check sequential & no duplicates
     for (let i = 0; i < pages; i++) {
-      if (sortedPages[i] !== i + 1) {
-        throw new Error(`Missing or duplicate page! Expected ${i + 1}, found ${sortedPages[i]}`);
+      if (collectedPages[i] !== i + 1) {
+        throw new Error(
+          `Sequential order violated! At index ${i}, expected Page ${i + 1}, but got Page ${collectedPages[i]}`,
+        );
       }
     }
 
-    // 2. Generate Real PDF through `createReducedPdf`
+    // Check no unnecessary blank pages:
+    // When pages >= sheets * 2: blankSides must be 0
+    // When pages < sheets * 2: blankSides is at most (pages % 2 === 1 ? 1 : 0)
+    const maxExpectedBlankSides = pages >= sheets * 2 ? 0 : pages % 2 === 1 ? 1 : 0;
+    if (blankSides > maxExpectedBlankSides) {
+      throw new Error(
+        `Unnecessary blank sides detected! Found ${blankSides}, expected at most ${maxExpectedBlankSides}`,
+      );
+    }
+
+    // 3. Generate REAL PDF via createReducedPdf
     const sampleBytes = await generateSamplePdf(pages);
     const result = await createReducedPdf(sampleBytes.buffer as ArrayBuffer, sheets);
 
-    if (result.outputPageCount !== sheets * 2) {
-      throw new Error(
-        `Output page count (${result.outputPageCount}) !== 2 * sheets (${sheets * 2})`,
-      );
-    }
-
-    // 3. Inspect generated PDF Blob
+    // 4. Verify generated PDF structure
     const outputBuffer = await result.blob.arrayBuffer();
-    const loadedDestDoc = await PDFDocument.load(outputBuffer);
-    const actualPageCount = loadedDestDoc.getPageCount();
+    const loadedDoc = await PDFDocument.load(outputBuffer);
+    const actualOutputPages = loadedDoc.getPageCount();
 
-    if (actualPageCount !== sheets * 2) {
+    if (actualOutputPages !== plan.totalPrintableSides) {
       throw new Error(
-        `Reloaded PDF has ${actualPageCount} pages, expected ${sheets * 2} pages`,
+        `Output page mismatch! Expected ${plan.totalPrintableSides}, got ${actualOutputPages}`,
       );
     }
 
-    // 4. Validate through validateReducedPdf
+    // 5. Verify through validateReducedPdf
     const valResult = await validateReducedPdf(
       new Uint8Array(outputBuffer),
-      sheets,
+      plan.actualSheetCount,
       pages,
     );
     if (!valResult.valid) {
-      throw new Error("Validation function returned false");
+      throw new Error("validateReducedPdf returned invalid");
     }
 
-    // Output stats
+    // 6. Summary printout
+    console.log(`[TEST] ${pages} source pages → Target: ${sheets} sheets:`);
+    console.log(`   • Output PDF pages (sides): ${actualOutputPages}`);
+    console.log(`   • Physical sheets used: ${plan.actualSheetCount}`);
     console.log(
-      `✓ PASS (Output: ${actualPageCount} pages [${sheets} physical sheets, duplex], Blob size: ${outputBuffer.byteLength} B, Blank sides: ${blankSides})`,
+      `   • Pages per printable side: ${plan.minPagesPerSide === plan.maxPagesPerSide ? plan.minPagesPerSide : `${plan.minPagesPerSide}–${plan.maxPagesPerSide}`}`,
     );
+    console.log(`   • Blank sides: ${blankSides} (unavoidable: ${maxExpectedBlankSides})`);
+    console.log(`   • Duplex order: Sheet 1 (F: ${plan.sheets[0]?.frontPages.join(", ") || "blank"}, B: ${plan.sheets[0]?.backPages.join(", ") || "blank"}) ...`);
+    console.log(`   • PDF validity: %PDF header verified, ${outputBuffer.byteLength} bytes`);
+    console.log(`   ✓ PASS\n`);
+
     passedCount++;
   }
 
-  console.log("\n=================================================");
-  console.log(`ALL ${passedCount} / ${REQUIRED_TEST_CASES.length} TEST CASES PASSED SUCCESSFULLY!`);
-  console.log("=================================================");
+  console.log("===============================================================================");
+  console.log(`SUMMARY: ALL ${passedCount} / ${REQUIRED_TEST_CASES.length} TEST CASES PASSED SUCCESSFULLY!`);
+  console.log("===============================================================================");
 }
 
 runTestSuite().catch((err) => {
-  console.error("\nTEST SUITE FAILED:", err);
+  console.error("\nTEST FAILED:", err);
   process.exit(1);
 });
