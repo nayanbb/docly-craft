@@ -90,6 +90,9 @@ export interface Tool {
   usageUnit?: UsageUnit | undefined;
   proBenefit?: string | undefined;
   requiresAuth?: boolean | undefined;
+  free?: boolean | undefined;
+  pro?: boolean | undefined;
+  keywords?: string[] | undefined;
 }
 
 export interface ToolCategory {
@@ -193,6 +196,8 @@ const t = (tool: Tool): Tool => {
   return {
     ...tool,
     access: isPro ? "pro" : "free",
+    free: !isPro,
+    pro: isPro,
     requiresAuth: tool.requiresAuth ?? isPro,
     usageLimit: limit,
     usageUnit: unit,
@@ -214,6 +219,7 @@ export const tools: Tool[] = [
     multiple: true,
     status: "available",
     actionLabel: "Merge PDF",
+    keywords: ["merge", "combine", "join", "concat"],
   }),
   t({
     id: "split-pdf",
@@ -226,6 +232,7 @@ export const tools: Tool[] = [
     formats: ["PDF"],
     status: "available",
     actionLabel: "Split PDF",
+    keywords: ["split", "separate", "divide", "extract"],
   }),
   t({
     id: "remove-pages",
@@ -237,6 +244,7 @@ export const tools: Tool[] = [
     route: "/tools/remove-pages",
     formats: ["PDF"],
     status: "available",
+    keywords: ["delete", "remove", "pages"],
   }),
   t({
     id: "extract-pages",
@@ -248,6 +256,7 @@ export const tools: Tool[] = [
     route: "/tools/extract-pages",
     formats: ["PDF"],
     status: "available",
+    keywords: ["extract", "separate", "pages"],
   }),
   t({
     id: "reorder-pdf",
@@ -259,6 +268,7 @@ export const tools: Tool[] = [
     route: "/tools/reorder-pdf",
     formats: ["PDF"],
     status: "available",
+    keywords: ["reorder", "sort", "pages", "arrange"],
   }),
   t({
     id: "rotate-pdf",
@@ -270,6 +280,7 @@ export const tools: Tool[] = [
     route: "/tools/rotate-pdf",
     formats: ["PDF"],
     status: "available",
+    keywords: ["rotate", "orientation", "turn"],
   }),
   t({
     id: "reduction-maker",
@@ -283,6 +294,24 @@ export const tools: Tool[] = [
     formats: ["PDF"],
     status: "available",
     actionLabel: "Create Reduced PDF",
+    access: "pro",
+    requiresAuth: true,
+    keywords: [
+      "reduction",
+      "reduction maker",
+      "reduce",
+      "duplex",
+      "9 page",
+      "12 page",
+      "16 page",
+      "n-up",
+      "nup",
+      "multi-page reduction",
+      "pocket",
+      "print",
+      "double-sided",
+      "cheat sheet",
+    ],
   }),
 
   // Optimize PDF
@@ -297,6 +326,7 @@ export const tools: Tool[] = [
     formats: ["PDF"],
     status: "available",
     actionLabel: "Compress PDF",
+    keywords: ["compress", "shrink", "reduce size", "optimize", "lighter"],
   }),
   t({
     id: "repair-pdf",
@@ -372,6 +402,7 @@ export const tools: Tool[] = [
     formats: ["DOC", "DOCX"],
     status: "available",
     actionLabel: "Convert to PDF",
+    keywords: ["word", "doc", "docx", "word to pdf", "convert word"],
   }),
   t({
     id: "excel-to-pdf",
@@ -384,6 +415,7 @@ export const tools: Tool[] = [
     formats: ["XLS", "XLSX"],
     status: "available",
     actionLabel: "Convert to PDF",
+    keywords: ["excel", "xls", "xlsx", "spreadsheet"],
   }),
   t({
     id: "powerpoint-to-pdf",
@@ -396,6 +428,7 @@ export const tools: Tool[] = [
     formats: ["PPT", "PPTX"],
     status: "available",
     actionLabel: "Convert to PDF",
+    keywords: ["powerpoint", "ppt", "pptx", "slides"],
   }),
 
   // Convert from PDF
@@ -409,6 +442,7 @@ export const tools: Tool[] = [
     route: "/tools/pdf-to-jpg",
     formats: ["PDF"],
     status: "available",
+    keywords: ["jpg", "jpeg", "image", "extract images", "picture"],
   }),
   t({
     id: "pdf-to-png",
@@ -420,6 +454,7 @@ export const tools: Tool[] = [
     route: "/tools/pdf-to-png",
     formats: ["PDF"],
     status: "available",
+    keywords: ["png", "image", "lossless", "picture"],
   }),
   t({
     id: "pdf-to-word",
@@ -432,6 +467,7 @@ export const tools: Tool[] = [
     formats: ["PDF"],
     status: "available",
     actionLabel: "Convert to Word",
+    keywords: ["word", "doc", "docx", "pdf to word", "convert pdf to word"],
   }),
   t({
     id: "pdf-to-excel",
@@ -787,6 +823,7 @@ export const tools: Tool[] = [
     formats: ["JPG", "PNG"],
     status: "available",
     actionLabel: "Create Passport Photo",
+    keywords: ["passport", "photo", "visa", "id card", "face", "ai passport photo"],
   }),
 
   // AI document tools
@@ -978,6 +1015,7 @@ export const megaMenuColumns: MegaMenuColumn[] = [
     toolIds: [
       "merge-pdf",
       "split-pdf",
+      "reduction-maker",
       "remove-pages",
       "extract-pages",
       "reorder-pdf",
@@ -1027,3 +1065,86 @@ export const iconSet = {
   Layers,
   Scissors,
 };
+
+/**
+ * Searches tools by query matching name, slug, keywords, category, and classification.
+ * Returns tools ranked by relevance.
+ */
+export function searchTools(rawQuery: string): Tool[] {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return [];
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  const scored: { tool: Tool; score: number }[] = [];
+
+  for (const tool of tools) {
+    let score = 0;
+    const name = tool.name.toLowerCase();
+    const id = tool.id.toLowerCase();
+    const desc = tool.description.toLowerCase();
+    const group = tool.group.toLowerCase();
+    const category = tool.category.toLowerCase();
+    const keywords = (tool.keywords || []).map((k) => k.toLowerCase());
+
+    // 1. Exact name match (highest priority)
+    if (name === query) {
+      score += 150;
+    } else if (name.startsWith(query)) {
+      score += 100;
+    } else if (name.includes(query)) {
+      score += 60;
+    }
+
+    // 2. Keyword exact or partial match
+    if (keywords.includes(query)) {
+      score += 95;
+    } else if (keywords.some((k) => k.startsWith(query))) {
+      score += 70;
+    } else if (keywords.some((k) => k.includes(query) || query.includes(k))) {
+      score += 45;
+    }
+
+    // 3. ID / slug match
+    if (id === query) {
+      score += 80;
+    } else if (id.includes(query)) {
+      score += 40;
+    }
+
+    // 4. Group / Category match (e.g. "image", "pdf", "ai")
+    if (
+      group === query ||
+      (query === "image" && (group === "image" || category.includes("image") || id.includes("image")))
+    ) {
+      score += 35;
+    } else if (category.includes(query)) {
+      score += 25;
+    }
+
+    // 5. Multi-term queries (e.g. "9 page", "word to pdf")
+    if (terms.length > 1) {
+      const allTermsFound = terms.every(
+        (term) =>
+          name.includes(term) ||
+          id.includes(term) ||
+          keywords.some((k) => k.includes(term)) ||
+          desc.includes(term),
+      );
+      if (allTermsFound) {
+        score += 50;
+      }
+    }
+
+    // 6. Description match
+    if (desc.includes(query)) {
+      score += 15;
+    }
+
+    if (score > 0) {
+      scored.push({ tool, score });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.tool);
+}

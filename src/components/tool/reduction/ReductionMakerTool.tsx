@@ -11,6 +11,7 @@ import {
   Loader2,
   X,
   Info,
+  Sparkles,
 } from "lucide-react";
 import type { Tool } from "@/lib/tools";
 import { PageHero } from "@/components/layout/PageHero";
@@ -29,9 +30,16 @@ import {
   type ReductionPlanSummary,
   type ReductionSize,
 } from "@/lib/pdf/reduction-maker";
+import { useAuth } from "@/lib/supabase/auth-context";
+import { useSubscription } from "@/lib/monetization/subscription";
+import { openRazorpayCheckout } from "@/lib/razorpay/service";
 import { toast } from "sonner";
 
 export function ReductionMakerTool({ tool }: { tool: Tool }) {
+  const { user } = useAuth();
+  const { isPro } = useSubscription();
+  const [isUpgrading, setIsUpgrading] = useState(false);
+
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
@@ -46,6 +54,25 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
 
   const isProcessingRef = useRef(false);
   const isDownloadingRef = useRef(false);
+
+  const handleProUpgrade = async () => {
+    setIsUpgrading(true);
+    const res = await openRazorpayCheckout(
+      { redirect: tool.route },
+      {
+        email: user?.email || undefined,
+        name: (user?.user_metadata?.["display_name"] as string | undefined) || undefined,
+      },
+    );
+    setIsUpgrading(false);
+    if (res.notConfigured) {
+      toast.info("Pro checkout isn't available yet.", {
+        description: res.error || "Your account is ready for Docly Pro.",
+      });
+    } else if (res.error && res.error !== "Payment dismissed") {
+      toast.error(res.error);
+    }
+  };
 
   // Handle incoming file
   const handleFiles = async (incoming: File[]) => {
@@ -97,6 +124,13 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
   }, [pageCount, reductionSize]);
 
   const handleProcess = async () => {
+    if (!isPro) {
+      const err = new Error("PRO_FEATURE_REQUIRED");
+      (err as any).code = "PRO_FEATURE_REQUIRED";
+      setErrorDetail("PRO_FEATURE_REQUIRED: Upgrade to Pro to use Reduction Maker.");
+      setState("error");
+      throw err;
+    }
     if (!file || !pageCount || !plan) return;
     if (state === "loading" || isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -108,16 +142,21 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
     setProgressLabel("Analyzing document and preparing duplex layout...");
 
     try {
-      const result = await createReducedPdf(file, reductionSize, (pct) => {
-        setProgress(pct);
-        if (pct < 30) {
-          setProgressLabel("Reading original pages...");
-        } else if (pct < 85) {
-          setProgressLabel("Arranging duplex sheets (front & back)...");
-        } else {
-          setProgressLabel("Generating final printable PDF...");
-        }
-      });
+      const result = await createReducedPdf(
+        file,
+        reductionSize,
+        (pct) => {
+          setProgress(pct);
+          if (pct < 30) {
+            setProgressLabel("Reading original pages...");
+          } else if (pct < 85) {
+            setProgressLabel("Arranging duplex sheets (front & back)...");
+          } else {
+            setProgressLabel("Generating final printable PDF...");
+          }
+        },
+        { isPro },
+      );
 
       setDownloadBlobData(result.blob);
       const baseName = file.name.replace(/\.[^/.]+$/, "");
@@ -193,16 +232,75 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
       {/* Main Workspace */}
       <div className="container-page py-10">
         <div className="mx-auto max-w-4xl space-y-8">
-          {/* Important Print Instruction Notice */}
-          <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-foreground">
-            <Printer className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-            <div>
-              <strong>Printing instruction:</strong> After downloading, print normally using{" "}
-              <span className="font-semibold text-primary">Both Sides / Duplex</span>. Do not use{" "}
-              <em>Pages per Sheet</em> in your printer dialog — the reduced grid layout is already
-              embedded directly into the generated PDF.
+          {!isPro ? (
+            <div className="rounded-3xl border-2 border-primary/40 bg-card p-8 sm:p-10 shadow-card text-center space-y-5 relative overflow-hidden animate-in fade-in duration-200">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Sparkles className="h-8 w-8" />
+              </div>
+
+              <div className="space-y-2 max-w-lg mx-auto">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                  🔒 PRO
+                </span>
+                <h2 className="text-2xl font-extrabold text-foreground">
+                  Reduction Maker is a Pro feature
+                </h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Upgrade to Pro to use Reduction Maker.
+                </p>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                {user ? (
+                  <button
+                    type="button"
+                    onClick={handleProUpgrade}
+                    disabled={isUpgrading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-opacity hover:opacity-95 w-full sm:w-auto disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {isUpgrading ? "Connecting to Razorpay..." : "Upgrade to Pro — ₹25/month"}
+                  </button>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      search={{ redirect: tool.route, reason: "upgrade" }}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-opacity hover:opacity-95 w-full sm:w-auto"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Upgrade to Pro
+                    </Link>
+                    <Link
+                      to="/login"
+                      search={{ redirect: tool.route }}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-secondary/50 px-6 py-3.5 text-sm font-semibold transition-colors hover:border-primary/40 hover:bg-secondary hover:text-primary w-full sm:w-auto"
+                    >
+                      Login
+                    </Link>
+                  </>
+                )}
+                <Link
+                  to="/pricing"
+                  search={{ redirect: tool.route, upgrade: "pro" }}
+                  className="text-xs text-muted-foreground hover:text-foreground font-medium underline-offset-4 hover:underline"
+                >
+                  View all plan benefits
+                </Link>
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Important Print Instruction Notice */}
+              <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-foreground">
+                <Printer className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <strong>Printing instruction:</strong> After downloading, print normally using{" "}
+                  <span className="font-semibold text-primary">Both Sides / Duplex</span>. Do not use{" "}
+                  <em>Pages per Sheet</em> in your printer dialog — the reduced grid layout is already
+                  embedded directly into the generated PDF.
+                </div>
+              </div>
 
           {/* Uploader (shown when no file selected) */}
           {!file && (
@@ -556,6 +654,8 @@ export function ReductionMakerTool({ tool }: { tool: Tool }) {
               </div>
             </div>
           )}
+          </>
+        )}
         </div>
       </div>
     </div>

@@ -90,12 +90,15 @@ export const PRO_ONLY_TOOL_IDS = new Set<string>([
   "pdf-redaction",
   "edit-pdf",
   "advanced-security",
+  "reduction-maker",
 ]);
 
 /**
  * Benefit-oriented upgrade messages for locked tools and premium features.
  */
 export const BENEFIT_MESSAGES: Record<string, string> = {
+  "reduction-maker":
+    "Reduce multi-page PDFs into pocket-sized N-up sheets automatically arranged for duplex printing.",
   "passport-photo":
     "Create a passport-style photo automatically while keeping your face and natural appearance unchanged.",
   "ai-passport-photo":

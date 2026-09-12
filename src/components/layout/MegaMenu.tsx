@@ -22,10 +22,17 @@ export function MegaMenuPanel({ onNavigate }: { onNavigate?: () => void }) {
                       to="/tools/$slug"
                       params={{ slug }}
                       onClick={onNavigate}
-                      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-foreground/85 transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground/85 transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} />
-                      <span className="truncate">{tool.name}</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={1.9} />
+                        <span className="truncate">{tool.name}</span>
+                      </div>
+                      {tool.access === "pro" && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-bold text-primary shrink-0">
+                          PRO
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );

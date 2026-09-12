@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { MegaMenuPanel } from "@/components/layout/MegaMenu";
+import { GlobalToolSearch } from "@/components/layout/GlobalToolSearch";
 import { convertMenuToolIds, megaMenuColumns, toolById } from "@/lib/tools";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { useSubscription } from "@/lib/monetization/subscription";
@@ -94,6 +95,20 @@ export function Header() {
               </Link>
             ))}
 
+            <Link
+              to="/tools/$slug"
+              params={{ slug: "reduction-maker" }}
+              className={cn(
+                triggerClass(pathname === "/tools/reduction-maker"),
+                "gap-1.5 whitespace-nowrap",
+              )}
+            >
+              Reduction Maker
+              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-bold tracking-wide text-primary">
+                PRO
+              </span>
+            </Link>
+
             <div className="relative">
               <button
                 type="button"
@@ -148,6 +163,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          <GlobalToolSearch />
           {user ? (
             <>
               {isPro ? (
@@ -315,6 +331,17 @@ export function Header() {
               </Link>
             ))}
 
+            <Link
+              to="/tools/$slug"
+              params={{ slug: "reduction-maker" }}
+              className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-secondary"
+            >
+              <span>Reduction Maker</span>
+              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-bold text-primary">
+                PRO
+              </span>
+            </Link>
+
             {megaMenuColumns.map((column) => (
               <div key={column.title} className="border-t border-border pt-1">
                 <button
@@ -342,10 +369,17 @@ export function Header() {
                           <Link
                             to="/tools/$slug"
                             params={{ slug: tool.route.replace("/tools/", "") }}
-                            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground/85 hover:bg-accent"
+                            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-foreground/85 hover:bg-accent"
                           >
-                            <Icon className="h-4 w-4 text-primary" strokeWidth={1.9} />
-                            {tool.name}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Icon className="h-4 w-4 text-primary shrink-0" strokeWidth={1.9} />
+                              <span className="truncate">{tool.name}</span>
+                            </div>
+                            {tool.access === "pro" && (
+                              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[0.625rem] font-bold text-primary shrink-0">
+                                PRO
+                              </span>
+                            )}
                           </Link>
                         </li>
                       );

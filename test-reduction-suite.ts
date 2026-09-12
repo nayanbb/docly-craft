@@ -204,7 +204,113 @@ async function runTestSuite() {
   }
 
   console.log("===============================================================================");
-  console.log(`SUMMARY: ALL ${passedCount} / ${MANDATORY_TEST_CASES.length} TEST CASES PASSED SUCCESSFULLY!`);
+  console.log(`SUMMARY: ALL ${passedCount} / ${MANDATORY_TEST_CASES.length} CORE REDUCTION CASES PASSED!`);
+  console.log("===============================================================================\n");
+
+  // =========================================================================
+  // PART 1 — PRO ENTITLEMENT & SECURITY BOUNDARY TESTS
+  // =========================================================================
+  console.log("===============================================================================");
+  console.log("PART 1: REDUCTION MAKER PRO ENTITLEMENT & SECURITY TESTS");
+  console.log("===============================================================================");
+
+  const { isProTool } = await import("./src/lib/monetization/config");
+  const { toolById, searchTools } = await import("./src/lib/tools");
+  const { PRO_FEATURE_REQUIRED } = await import("./src/lib/pdf/reduction-maker");
+
+  // Test 1: Registry check
+  const reductionTool = toolById("reduction-maker");
+  if (!reductionTool) {
+    throw new Error("reduction-maker tool not found in tool registry!");
+  }
+  if (!isProTool("reduction-maker")) {
+    throw new Error("isProTool('reduction-maker') returned false!");
+  }
+  if (reductionTool.access !== "pro") {
+    throw new Error(`Expected reduction-maker access='pro', got '${reductionTool.access}'`);
+  }
+  if (reductionTool.free !== false || reductionTool.pro !== true) {
+    throw new Error("Expected free=false and pro=true for reduction-maker");
+  }
+  console.log("✓ PASS: Reduction Maker is properly marked as PRO in registry & config.");
+
+  // Test 2: Security boundary check: Reject free user
+  const samplePdf = await generateSamplePdf(18);
+  let caughtError: any = null;
+  try {
+    await createReducedPdf(samplePdf, 9, undefined, { isPro: false });
+  } catch (err: any) {
+    caughtError = err;
+  }
+  if (!caughtError || (caughtError.message !== PRO_FEATURE_REQUIRED && caughtError.code !== PRO_FEATURE_REQUIRED)) {
+    throw new Error(`Security boundary failed! Expected ${PRO_FEATURE_REQUIRED}, got: ${caughtError}`);
+  }
+  console.log("✓ PASS: createReducedPdf rejected free user with PRO_FEATURE_REQUIRED.");
+
+  // Test 3: Allowed for Pro user
+  const proResult = await createReducedPdf(samplePdf, 9, undefined, { isPro: true });
+  if (!proResult || !proResult.blob) {
+    throw new Error("createReducedPdf failed for active Pro user!");
+  }
+  console.log("✓ PASS: createReducedPdf succeeded for authenticated Pro user.");
+
+  // =========================================================================
+  // PART 2 — GLOBAL TOOL SEARCH TESTS
+  // =========================================================================
+  console.log("\n===============================================================================");
+  console.log("PART 2: GLOBAL TOOL SEARCH TESTS");
+  console.log("===============================================================================");
+
+  const testSearchQueries = [
+    { query: "merge", expectedName: "Merge PDF" },
+    { query: "split", expectedName: "Split PDF" },
+    { query: "compress", expectedName: "Compress PDF" },
+    { query: "word", expectedContains: "Word" },
+    { query: "image", expectedGroup: "image" },
+    { query: "passport", expectedName: "AI Passport Photo" },
+    { query: "reduction", expectedName: "Reduction Maker", checkPro: true },
+    { query: "9 page", expectedName: "Reduction Maker" },
+    { query: "duplex", expectedName: "Reduction Maker" },
+  ];
+
+  for (const t of testSearchQueries) {
+    const results = searchTools(t.query);
+    if (results.length === 0) {
+      throw new Error(`searchTools("${t.query}") returned 0 results!`);
+    }
+
+    if (t.expectedName) {
+      const match = results.find((r) => r.name.toLowerCase() === t.expectedName!.toLowerCase());
+      if (!match) {
+        throw new Error(`searchTools("${t.query}") did not find "${t.expectedName}"! Found: ${results.map(r => r.name).join(", ")}`);
+      }
+      if (t.checkPro && match.access !== "pro") {
+        throw new Error(`Expected search result "${t.expectedName}" to be PRO, got: ${match.access}`);
+      }
+    } else if (t.expectedContains) {
+      const match = results.find((r) => r.name.includes(t.expectedContains!));
+      if (!match) {
+        throw new Error(`searchTools("${t.query}") did not contain "${t.expectedContains}"! Found: ${results.map(r => r.name).join(", ")}`);
+      }
+    } else if (t.expectedGroup) {
+      const match = results.find((r) => r.group === t.expectedGroup || r.category.includes(t.expectedGroup!));
+      if (!match) {
+        throw new Error(`searchTools("${t.query}") did not find any ${t.expectedGroup} tools!`);
+      }
+    }
+
+    console.log(`✓ PASS: searchTools("${t.query}") -> Found [${results.slice(0, 3).map(r => r.name).join(", ")}${results.length > 3 ? "..." : ""}]`);
+  }
+
+  // Verify non-existent search returns empty array
+  const emptyResults = searchTools("nonexistent-random-query-xyz");
+  if (emptyResults.length !== 0) {
+    throw new Error(`Expected 0 results for non-existent query, got ${emptyResults.length}`);
+  }
+  console.log("✓ PASS: searchTools('nonexistent-random-query-xyz') returned 0 results.");
+
+  console.log("\n===============================================================================");
+  console.log("FINAL VERIFICATION COMPLETE: ALL REDUCTION + PRO + SEARCH TESTS PASSED!");
   console.log("===============================================================================");
 }
 

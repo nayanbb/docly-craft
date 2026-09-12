@@ -13,6 +13,7 @@ interface UpgradeModalProps {
 
 const proFeatures = [
   "Unlimited Office conversions (Word, Excel, PowerPoint)",
+  "Reduction Maker",
   "AI Passport Photo & Background Removal",
   "Chat with PDF & AI Document Summarizer",
   "PDF → Notes & Questions / Quiz generation",

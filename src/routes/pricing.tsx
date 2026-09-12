@@ -52,6 +52,7 @@ const freeFeatures = [
 
 const proFeatures = [
   "Unlimited Office conversions",
+  "Reduction Maker",
   "AI Passport Photo",
   "Background Removal & AI Background Replacement",
   "Chat with PDF",

@@ -138,6 +138,12 @@ export interface ReductionResult {
   outputPageCount: number;
 }
 
+export const PRO_FEATURE_REQUIRED = "PRO_FEATURE_REQUIRED";
+
+export interface CreateReducedPdfOptions {
+  isPro?: boolean;
+}
+
 /**
  * Creates the final reduced PDF ready for duplex printing.
  * Output PDF structure:
@@ -152,7 +158,14 @@ export async function createReducedPdf(
   file: File | ArrayBuffer,
   reductionSize: ReductionSize,
   onProgress?: (percent: number) => void,
+  options?: CreateReducedPdfOptions,
 ): Promise<ReductionResult> {
+  if (options?.isPro === false) {
+    const err = new Error(PRO_FEATURE_REQUIRED);
+    (err as any).code = PRO_FEATURE_REQUIRED;
+    throw err;
+  }
+
   const arrayBuffer = file instanceof File ? await file.arrayBuffer() : file;
 
   onProgress?.(10);
