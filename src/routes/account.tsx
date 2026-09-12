@@ -18,7 +18,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { useSubscription, triggerSubscriptionRefresh } from "@/lib/monetization/subscription";
-import { cancelRazorpaySubscription } from "@/lib/razorpay/service";
+import { cancelUserSubscription } from "@/lib/payment/service";
 import { formatBillingDate } from "@/lib/monetization/plan";
 import { Logo } from "@/components/brand/Logo";
 import { toast } from "sonner";
@@ -156,7 +156,7 @@ function AccountView() {
       return;
     }
     setIsOpeningPortal(true);
-    const res = await cancelRazorpaySubscription();
+    const res = await cancelUserSubscription();
     setIsOpeningPortal(false);
     if (res.error) {
       toast.error(res.error);

@@ -6,7 +6,7 @@
  */
 
 import { openPayUCheckout, cancelPayUSubscription } from "@/lib/payu/checkout";
-import { openRazorpayCheckout, cancelRazorpaySubscription } from "@/lib/razorpay/service";
+import { cancelRazorpaySubscription } from "@/lib/razorpay/service";
 
 export interface PaymentCheckoutParams {
   redirect?: string;
@@ -19,31 +19,14 @@ export interface PaymentUserInfo {
 
 /**
  * Opens checkout modal/portal for upgrading to Docly Pro (₹25/month).
- * Routes to PayU India as the primary provider.
+ * Routes to PayU India as the authoritative provider.
  */
 export async function openPaymentCheckout(
   params: PaymentCheckoutParams = {},
-  userInfo?: PaymentUserInfo,
+  _userInfo?: PaymentUserInfo,
 ): Promise<{ success?: boolean; notConfigured?: boolean; error?: string }> {
-  // 1. Attempt PayU checkout (Primary)
-  const payUResult = await openPayUCheckout(params);
-
-  // If PayU is configured and initiated, return
-  if (payUResult.success) {
-    return payUResult;
-  }
-
-  // If PayU is unconfigured, check if legacy Razorpay can handle it
-  if (payUResult.notConfigured) {
-    const rzpResult = await openRazorpayCheckout(params, userInfo);
-    if (rzpResult.success) {
-      return rzpResult;
-    }
-    // Return primary error message
-    return payUResult;
-  }
-
-  return payUResult;
+  // Exclusively route to PayU Hosted Checkout
+  return await openPayUCheckout(params);
 }
 
 /**

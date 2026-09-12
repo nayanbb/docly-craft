@@ -11,7 +11,16 @@ DOCLY_CONVERTER_URL=http://localhost:8001
 
 
 # -----------------------------------------------------------------------------
-# Razorpay Subscriptions (Docly Pro ₹25/month)
+# PayU India Subscriptions (Docly Pro ₹25/month - Primary)
+# -----------------------------------------------------------------------------
+# PAYU_MERCHANT_KEY=your_payu_merchant_key_here
+# PAYU_MERCHANT_SALT=your_payu_merchant_salt_here
+# PAYU_ENVIRONMENT=test
+# PAYU_PRO_PLAN_ID=plan_docly_pro_monthly
+# PAYU_WEBHOOK_SECRET=your_payu_webhook_secret_here
+
+# -----------------------------------------------------------------------------
+# Razorpay Subscriptions (Docly Pro ₹25/month - Legacy Fallback)
 # -----------------------------------------------------------------------------
 # RAZORPAY_KEY_ID=rzp_test_your_key_id_here
 # RAZORPAY_KEY_SECRET=your_razorpay_key_secret_here

@@ -199,9 +199,9 @@ async function runRazorpayTestSuite() {
   assert(
     upgradeModalSrc.includes("Upgrade to Pro") &&
       upgradeModalSrc.includes("₹25/month") &&
-      upgradeModalSrc.includes("openRazorpayCheckout"),
+      (upgradeModalSrc.includes("openPaymentCheckout") || upgradeModalSrc.includes("openRazorpayCheckout")),
     13,
-    "UpgradeModal presents ₹25/month plan and wires directly to openRazorpayCheckout",
+    "UpgradeModal presents ₹25/month plan and wires to payment checkout",
   );
 
   // 14. Upgrade modal contains: Pro badge, ₹25/month price, feature list, CTA button
@@ -217,11 +217,11 @@ async function runRazorpayTestSuite() {
   // 15. Clicking upgrade opens Razorpay checkout (or shows configured status)
   const pricingSrc = fs.readFileSync("c:/Users/nayan/docly-craft/src/routes/pricing.tsx", "utf-8");
   assert(
-    pricingSrc.includes("openRazorpayCheckout") &&
+    (pricingSrc.includes("openPaymentCheckout") || pricingSrc.includes("openRazorpayCheckout")) &&
       pricingSrc.includes("res.notConfigured") &&
       pricingSrc.includes("Pro checkout isn't available yet"),
     15,
-    "Pricing page upgrade CTA calls openRazorpayCheckout and handles unconfigured gateway gracefully",
+    "Pricing page upgrade CTA calls payment checkout and handles unconfigured gateway gracefully",
   );
 
   // 16. Razorpay subscription creation endpoint responds with 401 for unauthenticated request
@@ -475,15 +475,15 @@ async function runRazorpayTestSuite() {
   assert(
     accountSrc.includes("Docly Pro (₹25/mo)") &&
       accountSrc.includes("Renews on") &&
-      accountSrc.includes("cancelRazorpaySubscription"),
+      (accountSrc.includes("cancelUserSubscription") || accountSrc.includes("cancelRazorpaySubscription")),
     31,
-    "Account page displays Docly Pro (₹25/mo) with renewal date and Razorpay cancellation CTA",
+    "Account page displays Docly Pro (₹25/mo) with renewal date and cancellation CTA",
   );
 
   // 32. Pro user can cancel subscription from Account page
   assert(
     accountSrc.includes("handleCancelSubscription") &&
-      accountSrc.includes("cancelRazorpaySubscription"),
+      (accountSrc.includes("cancelUserSubscription") || accountSrc.includes("cancelRazorpaySubscription")),
     32,
     "Pro user can trigger subscription cancellation from Account page",
   );

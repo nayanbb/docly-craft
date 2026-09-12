@@ -45,6 +45,10 @@ interface PaymentRecord {
   status: string;
   payment_method?: string;
   paid_at: string;
+  provider?: string;
+  provider_payment_id?: string;
+  provider_order_id?: string;
+  provider_subscription_id?: string;
   razorpay_payment_id?: string;
   razorpay_order_id?: string;
   razorpay_subscription_id?: string;
@@ -61,6 +65,10 @@ interface SubscriptionRecord {
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end?: boolean;
+  provider?: string;
+  provider_subscription_id?: string;
+  provider_customer_id?: string;
+  provider_plan_id?: string;
   razorpay_customer_id?: string;
   razorpay_subscription_id?: string;
   razorpay_plan_id?: string;
@@ -203,12 +211,12 @@ function AdminRoute() {
             <span>Refresh</span>
           </button>
           <a
-            href="https://dashboard.razorpay.com"
+            href="https://onboarding.payu.in"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:opacity-90 transition-opacity"
           >
-            <span>Razorpay Dashboard</span>
+            <span>PayU Dashboard</span>
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
@@ -220,7 +228,7 @@ function AdminRoute() {
         <div className="space-y-1">
           <p className="font-semibold text-foreground">Revenue Source of Truth</p>
           <p className="text-muted-foreground leading-relaxed">
-            Revenue and payment records shown here reflect verified Razorpay webhook and invoice records stored in Supabase. Bank payouts, settlements, and merchant balance are managed directly within the official Razorpay Dashboard.
+            Revenue and payment records shown here reflect verified payment and subscription records stored in Supabase (PayU & Razorpay). Bank payouts, settlements, and merchant balances are managed directly within the official payment gateway dashboards.
           </p>
         </div>
       </div>
@@ -230,7 +238,7 @@ function AdminRoute() {
         <div className="rounded-2xl border border-border bg-card p-4 space-y-1">
           <span className="text-[0.68rem] font-bold text-muted-foreground uppercase tracking-wider">Total Revenue</span>
           <p className="text-xl font-extrabold text-foreground">₹{metrics?.grossRevenue ?? 0}</p>
-          <span className="text-[0.65rem] text-emerald-500 font-medium">Verified Razorpay Payments</span>
+          <span className="text-[0.65rem] text-emerald-500 font-medium">Verified Gateway Payments</span>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 space-y-1">
@@ -379,10 +387,10 @@ function AdminRoute() {
                   <th className="px-4 py-3">Customer / Email</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Amount</th>
-                  <th className="px-4 py-3">Method</th>
+                  <th className="px-4 py-3">Provider</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Paid Date</th>
-                  <th className="px-4 py-3">Razorpay Payment ID</th>
+                  <th className="px-4 py-3">Payment ID / Ref</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -398,7 +406,7 @@ function AdminRoute() {
                       <td className="px-4 py-3 font-medium text-foreground">{p.email}</td>
                       <td className="px-4 py-3 text-muted-foreground">{p.plan}</td>
                       <td className="px-4 py-3 font-bold text-foreground">₹{p.amount}</td>
-                      <td className="px-4 py-3 uppercase text-[0.68rem] text-muted-foreground">{p.payment_method || "UPI/Card"}</td>
+                      <td className="px-4 py-3 uppercase text-[0.68rem] text-muted-foreground">{p.provider || "payu"} ({p.payment_method || "card"})</td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-bold ${
@@ -414,7 +422,7 @@ function AdminRoute() {
                         {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : "—"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground font-mono text-[0.68rem]">
-                        {p.razorpay_payment_id || p.razorpay_subscription_id || "—"}
+                        {p.provider_payment_id || p.razorpay_payment_id || p.provider_subscription_id || p.razorpay_subscription_id || "—"}
                       </td>
                     </tr>
                   ))
@@ -436,13 +444,14 @@ function AdminRoute() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Period End</th>
                   <th className="px-4 py-3">Auto-Renew</th>
-                  <th className="px-4 py-3">Razorpay Sub ID</th>
+                  <th className="px-4 py-3">Provider</th>
+                  <th className="px-4 py-3">Subscription Ref</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {subscriptions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                       No user subscriptions found.
                     </td>
                   </tr>
@@ -474,8 +483,11 @@ function AdminRoute() {
                           <span className="text-emerald-500 font-semibold">Yes</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 uppercase text-[0.68rem] text-muted-foreground">
+                        {s.provider || "payu"}
+                      </td>
                       <td className="px-4 py-3 font-mono text-[0.68rem] text-muted-foreground">
-                        {s.razorpay_subscription_id || "—"}
+                        {s.provider_subscription_id || s.razorpay_subscription_id || "—"}
                       </td>
                     </tr>
                   ))

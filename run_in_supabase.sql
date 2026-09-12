@@ -108,6 +108,22 @@ begin
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' and column_name = 'expired_at') then
     alter table public.subscriptions add column expired_at timestamp with time zone;
   end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' and column_name = 'provider') then
+    alter table public.subscriptions add column provider text not null default 'payu';
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' and column_name = 'provider_subscription_id') then
+    alter table public.subscriptions add column provider_subscription_id text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' and column_name = 'provider_customer_id') then
+    alter table public.subscriptions add column provider_customer_id text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' and column_name = 'provider_plan_id') then
+    alter table public.subscriptions add column provider_plan_id text;
+  end if;
 end $$;
 
 create table if not exists public.payments (
@@ -145,6 +161,22 @@ begin
 
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'payments' and column_name = 'payment_method') then
     alter table public.payments add column payment_method text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'payments' and column_name = 'provider') then
+    alter table public.payments add column provider text not null default 'payu';
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'payments' and column_name = 'provider_payment_id') then
+    alter table public.payments add column provider_payment_id text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'payments' and column_name = 'provider_order_id') then
+    alter table public.payments add column provider_order_id text;
+  end if;
+
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'payments' and column_name = 'provider_subscription_id') then
+    alter table public.payments add column provider_subscription_id text;
   end if;
 end $$;
 

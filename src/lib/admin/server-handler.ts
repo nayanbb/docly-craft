@@ -178,7 +178,7 @@ export async function handleAdminMetricsRequest(request: Request, env?: unknown)
         pastDueSubscriptions,
         failedPayments,
         sourceOfTruthNotice:
-          "Revenue displayed is derived from verified Razorpay payment data in Supabase. Bank payouts and merchant balance are managed directly in the Razorpay Dashboard.",
+          "Revenue displayed is derived from verified payment and subscription records in Supabase (PayU & Razorpay). Bank payouts and merchant balance are managed directly in the payment gateway dashboards.",
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
@@ -206,15 +206,35 @@ export async function handleAdminPaymentsRequest(request: Request, env?: unknown
   const db = getServiceSupabase(env);
 
   try {
-    const { data: payments, error } = await db
+    let payments: any[] = [];
+    const { data: fullPayments, error: fullError } = await db
       .from("payments")
       .select(
-        "id, user_id, amount, currency, status, payment_method, paid_at, razorpay_payment_id, razorpay_order_id, razorpay_subscription_id, razorpay_invoice_id, created_at",
+        "id, user_id, amount, currency, status, payment_method, paid_at, provider, provider_payment_id, provider_order_id, provider_subscription_id, razorpay_payment_id, razorpay_order_id, razorpay_subscription_id, razorpay_invoice_id, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
 
-    if (error) throw error;
+    if (!fullError && fullPayments) {
+      payments = fullPayments;
+    } else {
+      const { data: fallbackPayments, error: fallbackError } = await db
+        .from("payments")
+        .select(
+          "id, user_id, amount, currency, status, payment_method, paid_at, razorpay_payment_id, razorpay_order_id, razorpay_subscription_id, razorpay_invoice_id, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (fallbackError) throw fallbackError;
+      payments = (fallbackPayments || []).map((p) => ({
+        ...p,
+        provider: "payu",
+        provider_payment_id: p.razorpay_payment_id,
+        provider_order_id: p.razorpay_order_id,
+        provider_subscription_id: p.razorpay_subscription_id,
+      }));
+    }
 
     const userIds = Array.from(new Set((payments || []).map((p) => p.user_id)));
     const { data: profiles } = await db
@@ -258,15 +278,35 @@ export async function handleAdminSubscriptionsRequest(request: Request, env?: un
   const db = getServiceSupabase(env);
 
   try {
-    const { data: subs, error } = await db
+    let subs: any[] = [];
+    const { data: fullSubs, error: fullError } = await db
       .from("subscriptions")
       .select(
-        "id, user_id, plan, status, started_at, current_period_start, current_period_end, cancel_at_period_end, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id, created_at",
+        "id, user_id, plan, status, started_at, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(100);
 
-    if (error) throw error;
+    if (!fullError && fullSubs) {
+      subs = fullSubs;
+    } else {
+      const { data: fallbackSubs, error: fallbackError } = await db
+        .from("subscriptions")
+        .select(
+          "id, user_id, plan, status, started_at, current_period_start, current_period_end, cancel_at_period_end, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (fallbackError) throw fallbackError;
+      subs = (fallbackSubs || []).map((s) => ({
+        ...s,
+        provider: "payu",
+        provider_subscription_id: s.razorpay_subscription_id,
+        provider_customer_id: s.razorpay_customer_id,
+        provider_plan_id: s.razorpay_plan_id,
+      }));
+    }
 
     const userIds = Array.from(new Set((subs || []).map((s) => s.user_id)));
     const { data: profiles } = await db

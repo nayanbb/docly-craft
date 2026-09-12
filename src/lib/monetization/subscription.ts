@@ -31,6 +31,10 @@ export interface UserSubscription {
   currentPeriodEnd?: string | undefined;
   currentPeriodStart?: string | undefined;
   cancelAtPeriodEnd?: boolean | undefined;
+  provider?: string | undefined;
+  providerSubscriptionId?: string | undefined;
+  providerCustomerId?: string | undefined;
+  providerPlanId?: string | undefined;
   razorpayCustomerId?: string | undefined;
   razorpaySubscriptionId?: string | undefined;
   razorpayPlanId?: string | undefined;
@@ -97,30 +101,58 @@ export function useSubscription(): UserSubscription {
         };
       }
 
-      // 2. Query both public.subscriptions and public.entitlements
-      const [subResult, entResult] = await Promise.all([
-        supabase
+      // 2. Query public.subscriptions with automatic schema resilience
+      let subData: RawSubscriptionData | null = null;
+      try {
+        const fullQuery = await supabase
           .from("subscriptions")
           .select(
-            "plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",
+            "plan, status, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",
           )
           .eq("user_id", user.id)
-          .maybeSingle(),
-        supabase
+          .maybeSingle();
+
+        if (!fullQuery.error && fullQuery.data) {
+          subData = fullQuery.data as RawSubscriptionData;
+        } else {
+          // Backward-compatible fallback to core schema if provider columns are not yet added
+          const fallbackQuery = await supabase
+            .from("subscriptions")
+            .select("plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_subscription_id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (fallbackQuery.data) {
+            subData = {
+              ...fallbackQuery.data,
+              provider: "payu",
+              provider_subscription_id: fallbackQuery.data.razorpay_subscription_id,
+            } as RawSubscriptionData;
+          }
+        }
+      } catch (err) {
+        console.warn("Subscription query fallback notice:", err);
+      }
+
+      // 3. Query public.entitlements safely (table is optional)
+      let entData: RawEntitlementData | null = null;
+      try {
+        const entQuery = await supabase
           .from("entitlements")
           .select("plan, grant_type, expires_at, notes")
           .eq("user_id", user.id)
-          .maybeSingle(),
-      ]);
-
-      if (subResult.error) {
-        console.warn("Error reading subscription status:", subResult.error.message);
+          .maybeSingle();
+        if (entQuery.data) {
+          entData = entQuery.data as RawEntitlementData;
+        }
+      } catch {
+        // Table not present yet
       }
 
       const evaluated = resolveUserEntitlement(
         user.id,
-        subResult.data as RawSubscriptionData | null,
-        entResult.data as RawEntitlementData | null,
+        subData,
+        entData,
       );
 
       return {
@@ -130,6 +162,10 @@ export function useSubscription(): UserSubscription {
         currentPeriodEnd: evaluated.currentPeriodEnd,
         currentPeriodStart: evaluated.currentPeriodStart,
         cancelAtPeriodEnd: evaluated.cancelAtPeriodEnd,
+        provider: evaluated.provider,
+        providerSubscriptionId: evaluated.providerSubscriptionId,
+        providerCustomerId: evaluated.providerCustomerId,
+        providerPlanId: evaluated.providerPlanId,
         razorpayCustomerId: evaluated.razorpayCustomerId,
         razorpaySubscriptionId: evaluated.razorpaySubscriptionId,
         razorpayPlanId: evaluated.razorpayPlanId,
@@ -218,7 +254,7 @@ export async function verifyServerUserSubscription(
       supabase
         .from("subscriptions")
         .select(
-          "plan, status, current_period_start, current_period_end, cancel_at_period_end, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",
+          "plan, status, current_period_start, current_period_end, cancel_at_period_end, provider, provider_subscription_id, provider_customer_id, provider_plan_id, razorpay_customer_id, razorpay_subscription_id, razorpay_plan_id",
         )
         .eq("user_id", userId)
         .maybeSingle(),

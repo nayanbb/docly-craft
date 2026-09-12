@@ -29,6 +29,10 @@ export interface RawSubscriptionData {
   current_period_end?: string | null | undefined;
   current_period_start?: string | null | undefined;
   cancel_at_period_end?: boolean | null | undefined;
+  provider?: string | null | undefined;
+  provider_subscription_id?: string | null | undefined;
+  provider_customer_id?: string | null | undefined;
+  provider_plan_id?: string | null | undefined;
   razorpay_customer_id?: string | null | undefined;
   razorpay_subscription_id?: string | null | undefined;
   razorpay_plan_id?: string | null | undefined;
@@ -44,6 +48,10 @@ export interface EffectiveSubscription {
   currentPeriodEnd?: string | undefined;
   currentPeriodStart?: string | undefined;
   cancelAtPeriodEnd: boolean;
+  provider?: string | undefined;
+  providerSubscriptionId?: string | undefined;
+  providerCustomerId?: string | undefined;
+  providerPlanId?: string | undefined;
   razorpayCustomerId?: string | undefined;
   razorpaySubscriptionId?: string | undefined;
   razorpayPlanId?: string | undefined;
@@ -126,6 +134,10 @@ export function evaluateSubscription(
     currentPeriodEnd: sub.current_period_end || undefined,
     currentPeriodStart: sub.current_period_start || undefined,
     cancelAtPeriodEnd,
+    provider: sub.provider || (sub.razorpay_subscription_id ? "razorpay" : undefined),
+    providerSubscriptionId: sub.provider_subscription_id || sub.razorpay_subscription_id || undefined,
+    providerCustomerId: sub.provider_customer_id || sub.razorpay_customer_id || undefined,
+    providerPlanId: sub.provider_plan_id || sub.razorpay_plan_id || undefined,
     razorpayCustomerId: sub.razorpay_customer_id || undefined,
     razorpaySubscriptionId: sub.razorpay_subscription_id || undefined,
     razorpayPlanId: sub.razorpay_plan_id || undefined,

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
-import { openRazorpayCheckout } from "@/lib/razorpay/service";
+import { openPaymentCheckout } from "@/lib/payment/service";
 import { useAuth } from "@/lib/supabase/auth-context";
 
 interface UpgradeModalProps {
@@ -31,7 +31,7 @@ export function UpgradeModal({ isOpen, onClose, redirect = "/dashboard", sourceF
 
   const handleUpgrade = async () => {
     setIsUpgrading(true);
-    const res = await openRazorpayCheckout(
+    const res = await openPaymentCheckout(
       { redirect },
       {
         email: user?.email || undefined,
@@ -102,10 +102,10 @@ export function UpgradeModal({ isOpen, onClose, redirect = "/dashboard", sourceF
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 px-6 text-sm font-bold text-primary-foreground shadow-md hover:opacity-95 transition-opacity disabled:opacity-50"
           >
             <Sparkles className="h-4 w-4" />
-            <span>{isUpgrading ? "Connecting to Razorpay..." : "Upgrade to Pro — ₹25/month"}</span>
+            <span>{isUpgrading ? "Connecting to checkout..." : "Upgrade to Pro — ₹25/month"}</span>
           </button>
           <p className="text-center text-[0.7rem] text-muted-foreground">
-            Payments are securely processed by Razorpay. Cancel anytime.
+            Payments are securely processed. Cancel anytime.
           </p>
         </div>
       </div>

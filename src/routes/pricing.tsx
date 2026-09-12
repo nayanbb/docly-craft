@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { PageHero } from "@/components/layout/PageHero";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { useSubscription } from "@/lib/monetization/subscription";
-import { openRazorpayCheckout } from "@/lib/razorpay/service";
+import { openPaymentCheckout } from "@/lib/payment/service";
 import { useRequireAuth, sanitizeRedirectPath } from "@/lib/auth/require-auth";
 import { PRICING, FILE_SIZE_LIMITS } from "@/lib/monetization/config";
 
@@ -87,7 +87,7 @@ function Pricing() {
   const handleProUpgrade = () => {
     requireAuth(async () => {
       setIsUpgrading(true);
-      const res = await openRazorpayCheckout(
+      const res = await openPaymentCheckout(
         { redirect: safeTarget },
         {
           email: user?.email || undefined,
@@ -209,7 +209,7 @@ function Pricing() {
                 className="mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-95 disabled:opacity-50"
               >
                 <Sparkles className="h-4 w-4" />
-                {isUpgrading ? "Connecting to Razorpay..." : "Upgrade to Pro — ₹25/month"}
+                {isUpgrading ? "Connecting to checkout..." : "Upgrade to Pro — ₹25/month"}
               </button>
             )}
           </div>

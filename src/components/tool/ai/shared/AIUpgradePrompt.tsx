@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Sparkles, ShieldCheck, Zap } from "lucide-react";
-import { openRazorpayCheckout } from "@/lib/razorpay/service";
+import { openPaymentCheckout } from "@/lib/payment/service";
 import { useAuth } from "@/lib/supabase/auth-context";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
@@ -28,7 +28,7 @@ export function AIUpgradePrompt({
   const handleCheckout = async () => {
     setLoading(true);
     try {
-      const res = await openRazorpayCheckout(
+      const res = await openPaymentCheckout(
         { redirect: toolRoute },
         {
           email: user?.email,
